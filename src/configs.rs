@@ -1,9 +1,23 @@
 use crate::error::Result;
 
+use ring::rand::SecureRandom;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+
+// Helper functions
+//--------------------------------------------------------------------------------------------------
+
+fn get_unix_time_ms() -> Result<u128> {
+    if cfg!(miri) {
+        // REALTIME is not available when running with Miri.
+        // Therefore, we return suitable test pattern instead.
+        Ok(0x0155_5555_5555)
+    } else {
+        Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis())
+    }
+}
 
 // 256-bit authorization key
 //--------------------------------------------------------------------------------------------------
@@ -24,10 +38,24 @@ pub struct DeviceInfo {
 impl DeviceInfo {
     /// Generating secure random authorization key
     ///
-    /// This function uses OpenSSL to generate cryptographically strong pseudo-random key
-    pub fn generate_authorization_key() -> Result<AuthorizationKey> {
+    /// This function uses ring crate to generate secure random key
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use ring::rand::SystemRandom;
+    /// use mobile_api::configs::DeviceInfo;
+    ///
+    /// let rng = SystemRandom::new();
+    /// let key = DeviceInfo::generate_authorization_key(&rng).unwrap();
+    /// ```
+    ///
+    /// **Note:** An application should create a single SystemRandom and then use it for all
+    /// randomness generation. Besides being more efficient, this also helps document where
+    /// non-deterministic (random) outputs occur.
+    pub fn generate_authorization_key(rng: &dyn SecureRandom) -> Result<AuthorizationKey> {
         let mut authorization_key = [0u8; 32];
-        openssl::rand::rand_bytes(&mut authorization_key)?;
+        rng.fill(&mut authorization_key)?;
         Ok(authorization_key)
     }
 
@@ -61,13 +89,28 @@ impl DeviceInfo {
     /// | var        | 2    | The variant field determines the layout of the UUID |
     /// | rand_b     | 62   | Random bits                                         |
     ///
-    pub fn generate_uuid() -> Result<Uuid> {
+    /// This function uses ring crate to generate secure random bytes
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use ring::rand::SystemRandom;
+    /// use mobile_api::configs::DeviceInfo;
+    ///
+    /// let rng = SystemRandom::new();
+    /// let uuid = DeviceInfo::generate_uuid(&rng).unwrap();
+    /// ```
+    ///
+    /// **Note:** An application should create a single SystemRandom and then use it for all
+    /// randomness generation. Besides being more efficient, this also helps document where
+    /// non-deterministic (random) outputs occur.
+    pub fn generate_uuid(rng: &dyn SecureRandom) -> Result<Uuid> {
         // First 48 bits are unix time in milliseconds
-        let mut uuid = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() << 80;
+        let mut uuid = get_unix_time_ms()? << 80;
 
         // Randomizing rest of the bits
         let mut bytes = [0u8; 16];
-        openssl::rand::rand_bytes(&mut bytes[6..])?;
+        rng.fill(&mut bytes[6..])?;
         uuid |= u128::from_be_bytes(bytes);
 
         // Setting UUID version 7 bits
@@ -84,11 +127,13 @@ impl DeviceInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ring::rand::SystemRandom;
 
     #[test]
     fn generate_authorization_key() {
-        let auth_key_a = DeviceInfo::generate_authorization_key();
-        let auth_key_b = DeviceInfo::generate_authorization_key();
+        let rng = SystemRandom::new();
+        let auth_key_a = DeviceInfo::generate_authorization_key(&rng);
+        let auth_key_b = DeviceInfo::generate_authorization_key(&rng);
         assert!(auth_key_a.is_ok());
         assert!(auth_key_b.is_ok());
         assert_ne!(auth_key_a.unwrap(), auth_key_b.unwrap());
@@ -97,14 +142,12 @@ mod tests {
     #[test]
     fn generate_uuid() {
         // Get current system time to compare results
-        let unix_ts_start = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
+        let unix_ts_start = get_unix_time_ms().unwrap();
 
         // UUID generation should work
-        let uuid_a = DeviceInfo::generate_uuid();
-        let uuid_b = DeviceInfo::generate_uuid();
+        let rng = SystemRandom::new();
+        let uuid_a = DeviceInfo::generate_uuid(&rng);
+        let uuid_b = DeviceInfo::generate_uuid(&rng);
         assert!(uuid_a.is_ok());
         assert!(uuid_b.is_ok());
 
@@ -132,17 +175,20 @@ mod tests {
 
         // The time difference between start time and time in UUID should generally be 0 -- 1 ms.
         // However, it can be much greater when the test is run with Valgrind. Therefore we accept
-        // a time difference that is less than 5 seconds.
+        // a time difference that is less than 1 second.
+        let accepted_delay_ms = 1000;
         let time_diff_a = unix_ts_a - unix_ts_start;
         let time_diff_b = unix_ts_b - unix_ts_start;
         assert!(
-            time_diff_a < 5000,
-            "Expected time difference more than 5000 ms: {}",
+            time_diff_a < accepted_delay_ms,
+            "Expected time difference is more than {} ms: Difference {} ms",
+            accepted_delay_ms,
             time_diff_a
         );
         assert!(
-            time_diff_b < 5000,
-            "Expected time difference more than 5000 ms: {}",
+            time_diff_b < accepted_delay_ms,
+            "Expected time difference is more than {} ms: Difference {} ms",
+            accepted_delay_ms,
             time_diff_b
         );
     }

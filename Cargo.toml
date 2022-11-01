@@ -6,9 +6,11 @@ edition = "2021"
 license-file = "LICENSE"
 
 [dependencies]
-openssl = { version = "0.10.42" }
-rocket = { version = "0.5.0-rc.2", features = [ "json", "uuid" ] }
-rocket_okapi = { version = "0.8.0-rc.2", features = [ "rapidoc", "swagger", "uuid" ] }
-serde = { version = "1.0.147"}
-serde_json = { version = "1.0.87" }
+ring = { version = "0.16.20" }
+serde = { version = "1.0.147", features = ["derive"] }
 uuid = { version = "1.2.1", features = [ "serde" ] }
+
+# We are planning to use these later
+#rocket = { version = "0.5.0-rc.2", features = [ "json", "uuid" ] }
+#rocket_okapi = { version = "0.8.0-rc.2", features = [ "rapidoc", "swagger", "uuid" ] }
+#serde_json = { version = "1.0.87" }

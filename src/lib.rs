@@ -28,6 +28,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)] // File I/O is not supported with Miri when isolation is enabled
     fn home_path() {
         // Testing default path
         env::remove_var(SIFIS_HOME_PATH_ENV);

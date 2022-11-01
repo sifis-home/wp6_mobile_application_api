@@ -1,4 +1,4 @@
-# Mobile Application API
+# Smart Device Mobile API
 
 [![LICENSE][license badge]][license] [![Actions Status][actions badge]][actions] [![CodeCov][codecov badge]][codecov]
 
@@ -7,6 +7,8 @@ This repository is for a service application that allows the mobile application 
 ## Project folders
 
 * docs – Documentation, instructions, plans
+  * [Smart Device Mobile API.md](docs/Smart Device Mobile API.md) – Plans for Mobile API service and demo setup
+
 * src – Source files for library and binaries
 
 <!-- Links -->
@@ -16,6 +18,7 @@ This repository is for a service application that allows the mobile application 
 [license]: LICENSE
 
 <!-- Badges -->
-[actions badge]: https://github.com/sifis-home/wp6_mobile_application_api/workflows/netspot_control/badge.svg
+
+[actions badge]: https://github.com/sifis-home/wp6_mobile_application_api/workflows/mobile_api-ubuntu/badge.svg
 [codecov badge]: https://codecov.io/gh/sifis-home/wp6_mobile_application_api/branch/master/graph/badge.svg
 [license badge]: https://img.shields.io/badge/license-MIT-blue.svg
