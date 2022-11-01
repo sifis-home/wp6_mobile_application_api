@@ -7,7 +7,7 @@ This repository is for a service application that allows the mobile application 
 ## Project folders
 
 * docs – Documentation, instructions, plans
-  * [Smart Device Mobile API.md](docs/Smart Device Mobile API.md) – Plans for Mobile API service and demo setup
+  * [Smart Device Mobile API](docs/Smart%20Device%20Mobile%20API.md) – Plans for Mobile API service and demo setup
 
 * src – Source files for library and binaries
 
