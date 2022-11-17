@@ -9,7 +9,7 @@
 //! reset.
 
 use crate::error::Result;
-use crate::security::{AuthorizationKey, SharedKey, SRNG};
+use crate::security::{SecurityKey, SRNG};
 use crate::sifis_home_path;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -20,14 +20,14 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub struct DeviceConfig {
     /// Shared key for DHT communication, 32 bytes in hex format
-    dht_shared_key: SharedKey,
+    dht_shared_key: SecurityKey,
     /// User-defined name for the Smart Device
     name: String,
 }
 
 impl DeviceConfig {
     /// Create a new configuration
-    pub fn new(dht_shared_key: SharedKey, name: String) -> DeviceConfig {
+    pub fn new(dht_shared_key: SecurityKey, name: String) -> DeviceConfig {
         DeviceConfig {
             dht_shared_key,
             name,
@@ -35,7 +35,7 @@ impl DeviceConfig {
     }
 
     /// Borrow shared DHT key
-    pub fn dht_shared_key(&self) -> &SharedKey {
+    pub fn dht_shared_key(&self) -> &SecurityKey {
         &self.dht_shared_key
     }
 
@@ -45,7 +45,7 @@ impl DeviceConfig {
     }
 
     /// Change shared DHT key
-    pub fn set_dht_shared_key(&mut self, dht_shared_key: SharedKey) {
+    pub fn set_dht_shared_key(&mut self, dht_shared_key: SecurityKey) {
         self.dht_shared_key = dht_shared_key;
     }
 
@@ -66,7 +66,7 @@ impl DeviceConfig {
 pub struct DeviceInfo {
     /// 256-bit authorization key in hex format. SIFIS-Home mobile application needs this key to
     /// access configuration endpoints of the Smart Device Mobile API service.
-    authorization_key: AuthorizationKey,
+    authorization_key: SecurityKey,
     /// Path to DHT private key file. The sifis-dht generates key file on the first run
     private_key_file: PathBuf,
     /// Product name
@@ -84,7 +84,7 @@ impl DeviceInfo {
         let mut private_key_file = sifis_home_path();
         private_key_file.push("private.pem");
         Ok(DeviceInfo {
-            authorization_key: srng.generate_authorization_key()?,
+            authorization_key: srng.generate_key()?,
             private_key_file,
             product_name,
             uuid: srng.generate_uuid()?,
@@ -92,7 +92,7 @@ impl DeviceInfo {
     }
 
     /// Borrow authorization key
-    pub fn authorization_key(&self) -> &AuthorizationKey {
+    pub fn authorization_key(&self) -> &SecurityKey {
         &self.authorization_key
     }
 
@@ -115,7 +115,7 @@ impl DeviceInfo {
     ///
     /// **NOTE:** This is not good idea if authorization code is already printed as QR code for the
     /// product.
-    pub fn set_authorization_key(&mut self, authorization_key: AuthorizationKey) {
+    pub fn set_authorization_key(&mut self, authorization_key: SecurityKey) {
         self.authorization_key = authorization_key;
     }
 
@@ -140,17 +140,17 @@ mod tests {
     use super::*;
     use uuid::uuid;
 
-    const TEST_KEY_A: [u8; 32] = [
+    const TEST_KEY_A: SecurityKey = SecurityKey::from_bytes([
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
         0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
         0x1e, 0x1f,
-    ];
+    ]);
 
-    const TEST_KEY_B: [u8; 32] = [
+    const TEST_KEY_B: SecurityKey = SecurityKey::from_bytes([
         0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e,
         0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d,
         0x3e, 0x3f,
-    ];
+    ]);
 
     #[test]
     fn test_device_config() {
@@ -173,7 +173,7 @@ mod tests {
 
         // Testing constructor and getters
         let mut device = DeviceInfo::new("Test Device".to_string()).unwrap();
-        assert_eq!(device.authorization_key().len(), 32);
+        assert!(!device.authorization_key().is_null());
         assert_eq!(device.private_key_file(), &expected_private_key_file);
         assert_eq!(device.product_name(), "Test Device");
         assert_eq!(device.uuid().get_version_num(), 7);

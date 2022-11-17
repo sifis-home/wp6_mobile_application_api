@@ -35,7 +35,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self.0 {
             ErrorKind::IoError(ref err) => err.fmt(f),
+            ErrorKind::NumParseIntError(ref err) => err.fmt(f),
             ErrorKind::RngError(ref err) => err.fmt(f),
+            ErrorKind::SecurityKeyWrongSize => write!(f, "The given input has wrong length"),
             ErrorKind::TimeError(ref err) => err.fmt(f),
         }
     }
@@ -46,8 +48,12 @@ impl fmt::Display for Error {
 pub enum ErrorKind {
     /// Standard I/O errors
     IoError(std::io::Error),
+    /// Error while parsing integer value from str
+    NumParseIntError(std::num::ParseIntError),
     /// Unspecified error from the ring crate
     RngError(ring::error::Unspecified),
+    /// Invalid character count in hex string
+    SecurityKeyWrongSize,
     /// Error with the time
     TimeError(std::time::SystemTimeError),
 }
@@ -55,6 +61,12 @@ pub enum ErrorKind {
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Error::new(ErrorKind::IoError(err))
+    }
+}
+
+impl From<std::num::ParseIntError> for Error {
+    fn from(err: std::num::ParseIntError) -> Self {
+        Error::new(ErrorKind::NumParseIntError(err))
     }
 }
 
@@ -73,11 +85,12 @@ impl From<std::time::SystemTimeError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::security::SecurityKey;
 
     #[test]
     fn test_io_error() {
         let io_error_source = std::io::Error::new(std::io::ErrorKind::Other, "example error");
-        let io_error: Error = io_error_source.into();
+        let io_error = Error::from(io_error_source);
         let io_error_debug = format!("{:?}", io_error);
         let io_error_display = format!("{}", io_error);
         assert_eq!(
@@ -90,15 +103,47 @@ mod tests {
     }
 
     #[test]
+    fn test_num_parse_int_error() {
+        let parse_error_source = "x".parse::<u8>().err().unwrap();
+        let parse_error = Error::from(parse_error_source);
+        let parse_error_debug = format!("{:?}", parse_error);
+        let parse_error_display = format!("{}", parse_error);
+        assert_eq!(
+            parse_error_debug,
+            "Error(NumParseIntError(ParseIntError { kind: InvalidDigit }))"
+        );
+        assert_eq!(parse_error_display, "invalid digit found in string");
+        assert!(matches!(parse_error.kind(), ErrorKind::NumParseIntError(_)));
+        assert!(matches!(
+            parse_error.into_kind(),
+            ErrorKind::NumParseIntError(_)
+        ));
+    }
+
+    #[test]
     fn test_rng_error() {
         let rng_error_source = ring::error::Unspecified;
-        let rng_error: Error = rng_error_source.into();
+        let rng_error = Error::from(rng_error_source);
         let rng_error_debug = format!("{:?}", rng_error);
         let rng_error_display = format!("{}", rng_error);
         assert_eq!(rng_error_debug, "Error(RngError(Unspecified))");
         assert_eq!(rng_error_display, "ring::error::Unspecified");
         assert!(matches!(rng_error.kind(), ErrorKind::RngError(_)));
         assert!(matches!(rng_error.into_kind(), ErrorKind::RngError(_)));
+    }
+
+    #[test]
+    fn test_security_key_wrong_size_error() {
+        let key_error = SecurityKey::from_hex("_").err().unwrap();
+        let key_error_debug = format!("{:?}", key_error);
+        let key_error_display = format!("{}", key_error);
+        assert_eq!(key_error_debug, "Error(SecurityKeyWrongSize)");
+        assert_eq!(key_error_display, "The given input has wrong length");
+        assert!(matches!(key_error.kind(), ErrorKind::SecurityKeyWrongSize));
+        assert!(matches!(
+            key_error.into_kind(),
+            ErrorKind::SecurityKeyWrongSize
+        ));
     }
 
     #[test]
@@ -111,7 +156,7 @@ mod tests {
         sleep(Duration::from_millis(10));
         let time_b = SystemTime::now();
         let time_error_source = time_a.duration_since(time_b).err().unwrap();
-        let time_error: Error = time_error_source.into();
+        let time_error = Error::from(time_error_source);
         let time_error_debug = format!("{:?}", time_error);
         let time_error_display = format!("{}", time_error);
 
