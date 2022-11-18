@@ -37,7 +37,7 @@ impl fmt::Display for Error {
             ErrorKind::IoError(ref err) => err.fmt(f),
             ErrorKind::NumParseIntError(ref err) => err.fmt(f),
             ErrorKind::RngError(ref err) => err.fmt(f),
-            ErrorKind::SecurityKeyWrongSize => write!(f, "The given input has wrong length"),
+            ErrorKind::SecurityKeyWrongSize => write!(f, "key data length is incorrect"),
             ErrorKind::TimeError(ref err) => err.fmt(f),
         }
     }
@@ -138,7 +138,7 @@ mod tests {
         let key_error_debug = format!("{:?}", key_error);
         let key_error_display = format!("{}", key_error);
         assert_eq!(key_error_debug, "Error(SecurityKeyWrongSize)");
-        assert_eq!(key_error_display, "The given input has wrong length");
+        assert_eq!(key_error_display, "key data length is incorrect");
         assert!(matches!(key_error.kind(), ErrorKind::SecurityKeyWrongSize));
         assert!(matches!(
             key_error.into_kind(),

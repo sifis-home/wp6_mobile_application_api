@@ -7,6 +7,7 @@
 
 use crate::error::{Error, ErrorKind, Result};
 use ring::rand::{SecureRandom, SystemRandom};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -168,6 +169,66 @@ impl Debug for SecurityKey {
     }
 }
 
+impl<'de> Deserialize<'de> for SecurityKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        /// Helper function to map errors
+        fn de_error<E: de::Error>(e: Error) -> E {
+            E::custom(format_args!("SecurityKey parsing failed: {}", e))
+        }
+
+        if deserializer.is_human_readable() {
+            /// For converting human readable str to SecurityKey object
+            struct SecurityKeyVisitor;
+
+            impl<'vi> de::Visitor<'vi> for SecurityKeyVisitor {
+                type Value = SecurityKey;
+
+                fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                    write!(formatter, "64 hex characters")
+                }
+
+                fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+                where
+                    E: de::Error,
+                {
+                    SecurityKey::from_hex(v).map_err(de_error)
+                }
+            }
+
+            deserializer.deserialize_str(SecurityKeyVisitor)
+        } else {
+            /// For converting bytes to SecurityKey object
+            struct SecurityKeyBytesVisitor;
+
+            impl<'vi> de::Visitor<'vi> for SecurityKeyBytesVisitor {
+                type Value = SecurityKey;
+
+                fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                    write!(formatter, "32 bytes")
+                }
+
+                fn visit_bytes<E>(self, v: &[u8]) -> std::result::Result<Self::Value, E>
+                where
+                    E: de::Error,
+                {
+                    if v.len() == 32 {
+                        let mut key_bytes = [0u8; 32];
+                        key_bytes[..].copy_from_slice(v);
+                        Ok(SecurityKey::from_bytes(key_bytes))
+                    } else {
+                        Err(de_error(Error::new(ErrorKind::SecurityKeyWrongSize)))
+                    }
+                }
+            }
+
+            deserializer.deserialize_bytes(SecurityKeyBytesVisitor)
+        }
+    }
+}
+
 impl Display for SecurityKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.hex(false))
@@ -177,6 +238,19 @@ impl Display for SecurityKey {
 impl LowerHex for SecurityKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.hex(false))
+    }
+}
+
+impl Serialize for SecurityKey {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(self.hex(false).as_str())
+        } else {
+            serializer.serialize_bytes(self.as_bytes())
+        }
     }
 }
 
@@ -386,6 +460,60 @@ mod tests {
     #[test]
     fn test_security_key_into_bytes() {
         assert_eq!(TEST_KEY.into_bytes(), TEST_KEY_BYTES);
+    }
+
+    #[test]
+    fn test_security_key_serde() {
+        // Testing human readable with JSON
+        let key_a = SecurityKey::new().unwrap();
+        let json = serde_json::to_string(&key_a).unwrap();
+        let key_b = serde_json::from_str::<SecurityKey>(&json).unwrap();
+        assert_eq!(key_a, key_b);
+
+        // Invalid length JSON should cause error
+        let json = r#""F0E1D2C3B4A5968778695A4B3C2D1E0F""#;
+        let result = serde_json::from_str::<SecurityKey>(json);
+        assert!(result.is_err());
+        let error_message = format!("{}", result.err().unwrap());
+        assert!(
+            error_message.starts_with("SecurityKey parsing failed: key data length is incorrect")
+        );
+
+        // Invalid characters in JSON should cause error
+        let json = r#""----------------------------------------------------------------""#;
+        let result = serde_json::from_str::<SecurityKey>(json);
+        assert!(result.is_err());
+        let error_message = format!("{}", result.err().unwrap());
+        assert!(
+            error_message.starts_with("SecurityKey parsing failed: invalid digit found in string")
+        );
+
+        // Wrong type should cause error
+        let json = "true";
+        let result = serde_json::from_str::<SecurityKey>(json);
+        assert!(result.is_err());
+        let error_message = format!("{}", result.err().unwrap());
+        assert!(error_message.contains("64 hex characters"));
+
+        // Testing binary with MessagePack
+        let buf = rmp_serde::to_vec(&key_a).unwrap();
+        let key_b = rmp_serde::from_slice(&buf).unwrap();
+        assert_eq!(key_a, key_b);
+
+        // Wrong byte count should cause error
+        let result = rmp_serde::from_slice::<SecurityKey>(&[0xc4, 0x04, 0x00, 0x00, 0x00, 0x00]);
+        assert!(result.is_err());
+        let error_message = format!("{}", result.err().unwrap());
+        assert_eq!(
+            error_message,
+            "SecurityKey parsing failed: key data length is incorrect"
+        );
+
+        // Wrong type should cause error
+        let result = rmp_serde::from_slice::<SecurityKey>(&[0xa4, 0x54, 0x65, 0x73, 0x74]);
+        assert!(result.is_err());
+        let error_message = format!("{}", result.err().unwrap());
+        assert!(error_message.contains("32 bytes"));
     }
 
     #[test]
