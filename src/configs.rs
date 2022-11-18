@@ -9,25 +9,26 @@
 //! reset.
 
 use crate::error::Result;
-use crate::security::{AuthorizationKey, SharedKey, SRNG};
+use crate::security::{SecurityKey, SRNG};
 use crate::sifis_home_path;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
 /// Smart Device Configuration
 ///
 /// These are settings that the owner of the device sets using the SIFIS-Home mobile application.
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeviceConfig {
-    /// Shared key for DHT communication, 32 bytes in hex format
-    dht_shared_key: SharedKey,
     /// User-defined name for the Smart Device
     name: String,
+    /// Shared key for DHT communication, 32 bytes in hex format
+    dht_shared_key: SecurityKey,
 }
 
 impl DeviceConfig {
     /// Create a new configuration
-    pub fn new(dht_shared_key: SharedKey, name: String) -> DeviceConfig {
+    pub fn new(dht_shared_key: SecurityKey, name: String) -> DeviceConfig {
         DeviceConfig {
             dht_shared_key,
             name,
@@ -35,7 +36,7 @@ impl DeviceConfig {
     }
 
     /// Borrow shared DHT key
-    pub fn dht_shared_key(&self) -> &SharedKey {
+    pub fn dht_shared_key(&self) -> &SecurityKey {
         &self.dht_shared_key
     }
 
@@ -45,7 +46,7 @@ impl DeviceConfig {
     }
 
     /// Change shared DHT key
-    pub fn set_dht_shared_key(&mut self, dht_shared_key: SharedKey) {
+    pub fn set_dht_shared_key(&mut self, dht_shared_key: SecurityKey) {
         self.dht_shared_key = dht_shared_key;
     }
 
@@ -62,15 +63,15 @@ impl DeviceConfig {
 ///
 /// Some or all of these are delivered with the device in a QR code for the mobile application to
 /// scan.
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeviceInfo {
-    /// 256-bit authorization key in hex format. SIFIS-Home mobile application needs this key to
-    /// access configuration endpoints of the Smart Device Mobile API service.
-    authorization_key: AuthorizationKey,
-    /// Path to DHT private key file. The sifis-dht generates key file on the first run
-    private_key_file: PathBuf,
     /// Product name
     product_name: String,
+    /// 256-bit authorization key in hex format. SIFIS-Home mobile application needs this key to
+    /// access configuration endpoints of the Smart Device Mobile API service.
+    authorization_key: SecurityKey,
+    /// Path to DHT private key file. The sifis-dht generates key file on the first run
+    private_key_file: PathBuf,
     /// 128-bit UUID in standard hex format
     uuid: Uuid,
 }
@@ -84,7 +85,7 @@ impl DeviceInfo {
         let mut private_key_file = sifis_home_path();
         private_key_file.push("private.pem");
         Ok(DeviceInfo {
-            authorization_key: srng.generate_authorization_key()?,
+            authorization_key: srng.generate_key()?,
             private_key_file,
             product_name,
             uuid: srng.generate_uuid()?,
@@ -92,7 +93,7 @@ impl DeviceInfo {
     }
 
     /// Borrow authorization key
-    pub fn authorization_key(&self) -> &AuthorizationKey {
+    pub fn authorization_key(&self) -> &SecurityKey {
         &self.authorization_key
     }
 
@@ -115,7 +116,7 @@ impl DeviceInfo {
     ///
     /// **NOTE:** This is not good idea if authorization code is already printed as QR code for the
     /// product.
-    pub fn set_authorization_key(&mut self, authorization_key: AuthorizationKey) {
+    pub fn set_authorization_key(&mut self, authorization_key: SecurityKey) {
         self.authorization_key = authorization_key;
     }
 
@@ -140,17 +141,17 @@ mod tests {
     use super::*;
     use uuid::uuid;
 
-    const TEST_KEY_A: [u8; 32] = [
+    const TEST_KEY_A: SecurityKey = SecurityKey::from_bytes([
+        0xf0, 0xe1, 0xd2, 0xc3, 0xb4, 0xa5, 0x96, 0x87, 0x78, 0x69, 0x5a, 0x4b, 0x3c, 0x2d, 0x1e,
+        0x0f, 0x0f, 0x1e, 0x2d, 0x3c, 0x4b, 0x5a, 0x69, 0x78, 0x87, 0x96, 0xa5, 0xb4, 0xc3, 0xd2,
+        0xe1, 0xf0,
+    ]);
+
+    const TEST_KEY_B: SecurityKey = SecurityKey::from_bytes([
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
         0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
         0x1e, 0x1f,
-    ];
-
-    const TEST_KEY_B: [u8; 32] = [
-        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e,
-        0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d,
-        0x3e, 0x3f,
-    ];
+    ]);
 
     #[test]
     fn test_device_config() {
@@ -167,13 +168,27 @@ mod tests {
     }
 
     #[test]
+    fn test_device_config_serde() {
+        // Testing human readable with JSON
+        let config_a = DeviceConfig::new(SecurityKey::new().unwrap(), String::from("Test device"));
+        let json = serde_json::to_string(&config_a).unwrap();
+        let config_b = serde_json::from_str::<DeviceConfig>(&json).unwrap();
+        assert_eq!(config_a, config_b);
+
+        // Testing binary with MessagePack
+        let buf = rmp_serde::to_vec(&config_a).unwrap();
+        let config_b = rmp_serde::from_slice::<DeviceConfig>(&buf).unwrap();
+        assert_eq!(config_a, config_b);
+    }
+
+    #[test]
     fn test_device_info() {
         let mut expected_private_key_file = sifis_home_path();
         expected_private_key_file.push("private.pem");
 
         // Testing constructor and getters
         let mut device = DeviceInfo::new("Test Device".to_string()).unwrap();
-        assert_eq!(device.authorization_key().len(), 32);
+        assert!(!device.authorization_key().is_null());
         assert_eq!(device.private_key_file(), &expected_private_key_file);
         assert_eq!(device.product_name(), "Test Device");
         assert_eq!(device.uuid().get_version_num(), 7);
@@ -191,5 +206,21 @@ mod tests {
         );
         assert_eq!(device.product_name(), "New name");
         assert_eq!(device.uuid(), &new_uuid);
+    }
+
+    #[test]
+    fn test_device_info_serde() {
+        // Testing human readable with JSON
+        let info_a = DeviceInfo::new(String::from("Test device")).unwrap();
+        let json = serde_json::to_string(&info_a).unwrap();
+        let info_b = serde_json::from_str::<DeviceInfo>(&json).unwrap();
+        assert_eq!(info_a, info_b);
+
+        println!("{}", json);
+
+        // Testing binary with MessagePack
+        let buf = rmp_serde::to_vec(&info_a).unwrap();
+        let config_b = rmp_serde::from_slice::<DeviceInfo>(&buf).unwrap();
+        assert_eq!(info_a, config_b);
     }
 }
