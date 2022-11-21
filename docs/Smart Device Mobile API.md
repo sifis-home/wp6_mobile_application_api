@@ -6,10 +6,26 @@ The Smart Device Mobile API allows the Mobile application to initialize new devi
     * CPU usage
     * Memory usage
     * Disk space usage
+    * Uptime
+    * Load average
 * Sending commands
     * Factory reset settings
     * Restart device
     * Shut down device
+
+## Endpoints
+
+* Device information and configuration
+
+  * [GET] device/status
+
+  * [GET,PUT] device/configuration
+
+* Commands
+
+  * [GET] command/factory_reset
+  * [GET] command/restart
+  * [GET] command/shutdown
 
 ## Smart Device Initialization
 

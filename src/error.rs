@@ -10,7 +10,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// This Error is a container for boxed ErrorKind. From traits are implemented for known Errors,
 /// and the Display trait is implemented to allow formatting of the error messages.
 ///
-/// The `kind()` and `into_kind()` allow accessing the actual error object.
+/// The [Error::kind] and [Error::into_kind] allow accessing the actual error object.
 #[derive(Debug)]
 pub struct Error(Box<ErrorKind>);
 

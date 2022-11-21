@@ -11,14 +11,13 @@
 use crate::error::Result;
 use crate::security::{SecurityKey, SRNG};
 use crate::sifis_home_path;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
 /// Smart Device Configuration
-///
-/// These are settings that the owner of the device sets using the SIFIS-Home mobile application.
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, JsonSchema, Serialize)]
 pub struct DeviceConfig {
     /// User-defined name for the Smart Device
     name: String,
@@ -215,8 +214,6 @@ mod tests {
         let json = serde_json::to_string(&info_a).unwrap();
         let info_b = serde_json::from_str::<DeviceInfo>(&json).unwrap();
         assert_eq!(info_a, info_b);
-
-        println!("{}", json);
 
         // Testing binary with MessagePack
         let buf = rmp_serde::to_vec(&info_a).unwrap();

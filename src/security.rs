@@ -7,6 +7,9 @@
 
 use crate::error::{Error, ErrorKind, Result};
 use ring::rand::{SecureRandom, SystemRandom};
+use schemars::gen::SchemaGenerator;
+use schemars::schema::{Metadata, Schema, StringValidation};
+use schemars::JsonSchema;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -41,7 +44,7 @@ impl SecurityKey {
     /// Create new security key
     ///
     /// This function creates SRNG and uses it to generate new random key.
-    /// Calling SRNG::generate_key directly is more efficient.
+    /// Calling [SRNG::generate_key] directly is more efficient.
     pub fn new() -> Result<SecurityKey> {
         SRNG::new().generate_key()
     }
@@ -238,6 +241,33 @@ impl Display for SecurityKey {
 impl LowerHex for SecurityKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.hex(false))
+    }
+}
+
+impl JsonSchema for SecurityKey {
+    fn schema_name() -> String {
+        String::from("SecurityKey")
+    }
+
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        let mut schema = String::json_schema(gen).into_object();
+        let metadata = Metadata {
+            description: Some("A 256-bit key as a hex string".to_string()),
+            examples: vec![
+                "f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+                    .to_string()
+                    .into(),
+            ],
+            ..Default::default()
+        };
+        schema.metadata = Some(Box::new(metadata));
+        let string = StringValidation {
+            max_length: Some(64),
+            min_length: Some(64),
+            pattern: Some("^[0-9a-fA-F]{64}$".to_string()),
+        };
+        schema.string = Some(Box::new(string));
+        schema.into()
     }
 }
 
