@@ -1,0 +1,16 @@
+[package]
+name = "mobile_api"
+authors = ["Ossi Saukko <ossi.saukko@centria.fi>", "Olli Isohanni <olli.isohanni@centria.fi>"]
+version = "0.1.0"
+edition = "2021"
+license-file = "../LICENSE"
+
+[dependencies]
+ring = { version = "0.16.20" }
+schemars = { version = "0.8.11" }
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = { version = "1.0.88" }
+uuid = { version = "1.2.2", features = [ "serde" ] }
+
+[dev-dependencies]
+rmp-serde = { version = "1.1.1" }

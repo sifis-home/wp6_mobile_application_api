@@ -1,27 +1,2 @@
-[package]
-name = "smart_device_mobile_api"
-authors = ["Ossi Saukko <ossi.saukko@centria.fi>", "Olli Isohanni <olli.isohanni@centria.fi>"]
-version = "0.1.0"
-edition = "2021"
-license-file = "LICENSE"
-
-[lib]
-name = "mobile_api"
-path = "src/lib.rs"
-
-[[bin]]
-name = "mobile_api_server"
-path = "src/bin/server/main.rs"
-
-[dependencies]
-dotenv = { version = "0.15.0" }
-ring = { version = "0.16.20" }
-rocket = { version = "0.5.0-rc.2", features = [ "json", "uuid" ] }
-rocket_okapi = { version = "0.8.0-rc.2", features = [ "rapidoc", "swagger", "uuid" ] }
-schemars = { version = "0.8.11" }
-serde = { version = "1.0.147", features = ["derive"] }
-serde_json = { version = "1.0.88" }
-uuid = { version = "1.2.2", features = [ "serde" ] }
-
-[dev-dependencies]
-rmp-serde = { version = "1.1.1" }
+[workspace]
+members = ["mobile_api", "mobile_api_server"]
