@@ -10,10 +10,11 @@
 
 use crate::error::Result;
 use crate::security::{SecurityKey, SRNG};
-use crate::sifis_home_path;
+use crate::{device_config_path, device_info_path, sifis_home_path};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// Smart Device Configuration
@@ -39,9 +40,42 @@ impl DeviceConfig {
         &self.dht_shared_key
     }
 
+    /// Load from the default location
+    ///
+    /// This Convenience function tries to load a configuration file from
+    /// the location returned by the [device_config_path].
+    pub fn load() -> Result<DeviceConfig> {
+        Self::load_from(&device_config_path())
+    }
+
+    /// Load from file
+    ///
+    /// Tries to load and parse configuration from the given *file* path.
+    pub fn load_from(file: &Path) -> Result<DeviceConfig> {
+        let config_json = fs::read_to_string(file)?;
+        Ok(serde_json::from_str::<DeviceConfig>(&config_json)?)
+    }
+
     /// Borrow device name
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Write config to the default location.
+    ///
+    /// This convenience function tries to write configuration
+    /// to the file path given by the [device_config_path].
+    pub fn save(&self) -> Result<()> {
+        self.save_to(&device_config_path())
+    }
+
+    /// Save to file
+    ///
+    /// Tries to write configuration to the given *file* as pretty JSON.
+    pub fn save_to(&self, file: &Path) -> Result<()> {
+        let config_json = serde_json::to_string_pretty(&self)?;
+        fs::write(file, config_json.as_bytes())?;
+        Ok(())
     }
 
     /// Change shared DHT key
@@ -94,6 +128,39 @@ impl DeviceInfo {
     /// Borrow authorization key
     pub fn authorization_key(&self) -> &SecurityKey {
         &self.authorization_key
+    }
+
+    /// Load from the default location
+    ///
+    /// This Convenience function tries to load a information file from
+    /// the location returned by the [device_info_path].
+    pub fn load() -> Result<DeviceInfo> {
+        Self::load_from(&device_info_path())
+    }
+
+    /// Load from file
+    ///
+    /// Tries to load and parse device information from the given *file* path.
+    pub fn load_from(file: &Path) -> Result<DeviceInfo> {
+        let info_json = fs::read_to_string(file)?;
+        Ok(serde_json::from_str::<DeviceInfo>(&info_json)?)
+    }
+
+    /// Write info to the default location.
+    ///
+    /// This convenience function tries to write information
+    /// to the file path given by the [device_info_path].
+    pub fn save(&self) -> Result<()> {
+        self.save_to(&device_info_path())
+    }
+
+    /// Save to file
+    ///
+    /// Tries to write device information to the given *file* as pretty JSON.
+    pub fn save_to(&self, file: &Path) -> Result<()> {
+        let info_json = serde_json::to_string_pretty(&self)?;
+        fs::write(file, info_json.as_bytes())?;
+        Ok(())
     }
 
     /// Borrow private key file path

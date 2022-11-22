@@ -394,6 +394,8 @@ impl Default for SRNG {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use schemars::schema::{InstanceType, SingleOrVec};
+    use schemars::schema_for;
 
     const TEST_KEY_BYTES: KeyBytes = [
         0xf0, 0xe1, 0xd2, 0xc3, 0xb4, 0xa5, 0x96, 0x87, 0x78, 0x69, 0x5a, 0x4b, 0x3c, 0x2d, 0x1e,
@@ -409,8 +411,7 @@ mod tests {
         assert!(result.is_ok());
 
         if cfg!(miri) {
-            let ts = get_unix_time_ms().unwrap();
-            assert_eq!(ts, 0x0155_5555_5555);
+            assert_eq!(get_unix_time_ms().unwrap(), 0x0155_5555_5555);
         }
     }
 
@@ -544,6 +545,30 @@ mod tests {
         assert!(result.is_err());
         let error_message = format!("{}", result.err().unwrap());
         assert!(error_message.contains("32 bytes"));
+    }
+
+    #[test]
+    fn test_security_key_schema() {
+        let schema = schema_for!(SecurityKey).schema;
+
+        // Should have valid metadata
+        let metadata = schema.metadata.unwrap();
+        assert_eq!(metadata.title.unwrap(), "SecurityKey");
+        assert_eq!(
+            metadata.description.unwrap(),
+            "A 256-bit key as a hex string"
+        );
+
+        // Should have Single String instance type
+        let instance_type = schema.instance_type.unwrap();
+        let expected_type = SingleOrVec::Single(Box::new(InstanceType::String));
+        assert_eq!(instance_type, expected_type);
+
+        // Should have string validation for 64 character long hexadecimal
+        let string = schema.string.unwrap();
+        assert_eq!(string.max_length.unwrap(), 64);
+        assert_eq!(string.min_length.unwrap(), 64);
+        assert_eq!(string.pattern.unwrap(), "^[0-9a-fA-F]{64}$");
     }
 
     #[test]

@@ -1,2 +1,2 @@
 [workspace]
-members = ["mobile_api", "mobile_api_server"]
+members = [ "mobile_api", "mobile_api_server" ]

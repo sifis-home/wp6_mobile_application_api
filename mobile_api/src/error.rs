@@ -38,6 +38,7 @@ impl fmt::Display for Error {
             ErrorKind::NumParseIntError(ref err) => err.fmt(f),
             ErrorKind::RngError(ref err) => err.fmt(f),
             ErrorKind::SecurityKeyWrongSize => write!(f, "key data length is incorrect"),
+            ErrorKind::SerdeJson(ref err) => err.fmt(f),
             ErrorKind::TimeError(ref err) => err.fmt(f),
         }
     }
@@ -54,6 +55,8 @@ pub enum ErrorKind {
     RngError(ring::error::Unspecified),
     /// Invalid character count in hex string
     SecurityKeyWrongSize,
+    /// For JSON serialization errors
+    SerdeJson(serde_json::Error),
     /// Error with the time
     TimeError(std::time::SystemTimeError),
 }
@@ -73,6 +76,12 @@ impl From<std::num::ParseIntError> for Error {
 impl From<ring::error::Unspecified> for Error {
     fn from(err: ring::error::Unspecified) -> Self {
         Error::new(ErrorKind::RngError(err))
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::new(ErrorKind::SerdeJson(err))
     }
 }
 
@@ -144,6 +153,20 @@ mod tests {
             key_error.into_kind(),
             ErrorKind::SecurityKeyWrongSize
         ));
+    }
+
+    #[test]
+    fn test_serde_json_error() {
+        let json_error_source = serde_json::from_str::<String>("").err().unwrap();
+        let expected_debug = format!("Error(SerdeJson({:?}))", json_error_source);
+        let expected_display = format!("{}", json_error_source);
+        let json_error = Error::from(json_error_source);
+        let json_error_debug = format!("{:?}", json_error);
+        let json_error_display = format!("{}", json_error);
+        assert_eq!(json_error_debug, expected_debug);
+        assert_eq!(json_error_display, expected_display);
+        assert!(matches!(json_error.kind(), ErrorKind::SerdeJson(_)));
+        assert!(matches!(json_error.into_kind(), ErrorKind::SerdeJson(_)));
     }
 
     #[test]

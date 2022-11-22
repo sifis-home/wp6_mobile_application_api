@@ -11,7 +11,7 @@ pub mod error;
 pub mod security;
 
 /// Environment variable name for SIFIS-Home configuration files path
-const SIFIS_HOME_PATH_ENV: &str = "SIFIS_HOME_PATH";
+pub const SIFIS_HOME_PATH_ENV: &str = "SIFIS_HOME_PATH";
 
 /// Path to device configuration file
 ///
@@ -40,51 +40,4 @@ pub fn sifis_home_path() -> PathBuf {
         Ok(path) => path,
         Err(_) => String::from("/opt/sifis-home/"),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_paths() {
-        // Testing default paths
-        env::remove_var(SIFIS_HOME_PATH_ENV);
-        let home_path = sifis_home_path();
-        let config_path = device_config_path();
-        let info_path = device_info_path();
-        assert_eq!(home_path.to_str().unwrap(), "/opt/sifis-home/");
-        assert_eq!(config_path.to_str().unwrap(), "/opt/sifis-home/config.json");
-        assert_eq!(info_path.to_str().unwrap(), "/opt/sifis-home/device.json");
-
-        // Testing with environment variable ending with '/'
-        env::set_var(SIFIS_HOME_PATH_ENV, "/usr/lib/sifis-home/");
-        let home_path = sifis_home_path();
-        let config_path = device_config_path();
-        let info_path = device_info_path();
-        assert_eq!(home_path.to_str().unwrap(), "/usr/lib/sifis-home/");
-        assert_eq!(
-            config_path.to_str().unwrap(),
-            "/usr/lib/sifis-home/config.json"
-        );
-        assert_eq!(
-            info_path.to_str().unwrap(),
-            "/usr/lib/sifis-home/device.json"
-        );
-
-        // Testing with environment variable not ending with '/'
-        env::set_var(SIFIS_HOME_PATH_ENV, "/usr/lib/sifis-home");
-        let home_path = sifis_home_path();
-        let config_path = device_config_path();
-        let info_path = device_info_path();
-        assert_eq!(home_path.to_str().unwrap(), "/usr/lib/sifis-home");
-        assert_eq!(
-            config_path.to_str().unwrap(),
-            "/usr/lib/sifis-home/config.json"
-        );
-        assert_eq!(
-            info_path.to_str().unwrap(),
-            "/usr/lib/sifis-home/device.json"
-        );
-    }
 }
