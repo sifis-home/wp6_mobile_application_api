@@ -2,10 +2,12 @@
 //!
 //! These endpoints allow Mobile Application to check device status, read and set configuration.
 
+use crate::device_status::DeviceStatus;
+use crate::state::DeviceState;
 use mobile_api::configs::DeviceConfig;
 use rocket::http::Status;
 use rocket::serde::json::Json;
-use rocket::{get, put};
+use rocket::{get, put, State};
 use rocket_okapi::openapi;
 
 /// # Device status
@@ -24,8 +26,8 @@ use rocket_okapi::openapi;
 ///
 #[openapi(tag = "Device")]
 #[get("/device/status")]
-pub async fn status() -> &'static str {
-    "Not implemented yet"
+pub async fn status(state: &State<DeviceState>) -> Json<DeviceStatus> {
+    Json(state.device_status())
 }
 
 /// # Device configuration
