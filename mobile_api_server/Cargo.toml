@@ -4,6 +4,7 @@ authors = ["Ossi Saukko <ossi.saukko@centria.fi>", "Olli Isohanni <olli.isohanni
 version = "0.1.0"
 edition = "2021"
 license-file = "../LICENSE"
+default-run = "mobile_api_server"
 
 [dependencies]
 dotenv = { version = "0.15.0" }

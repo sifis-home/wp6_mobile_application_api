@@ -1,2 +1,2 @@
 [workspace]
-members = [ "mobile_api", "mobile_api_server" ]
+members = [ "create_device_info", "mobile_api", "mobile_api_server" ]

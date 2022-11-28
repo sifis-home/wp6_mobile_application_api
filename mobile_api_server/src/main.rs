@@ -22,55 +22,15 @@ use rocket::fs::{relative, FileServer};
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
-use std::fs;
+use std::process::ExitCode;
 
 pub mod api_v1;
 pub mod device_status;
 pub mod state;
 
-/// Loads device info or creates new one
-///
-/// If a new info file is created, the user must at least change
-/// the product name inside the file before the server can start.
-fn load_device_info() -> Result<DeviceInfo, String> {
-    // Ensure that SIFIS-Home path exists
-    fs::create_dir_all(sifis_home_path())
-        .map_err(|error| format!("Could not create SIFIS-Home path: {}", error))?;
-
-    // Try to load existing information file
-    let device_info = match DeviceInfo::load() {
-        Ok(info) => info,
-        Err(load_error) => match load_error.kind() {
-            ErrorKind::IoError(io_error) => match io_error.kind() {
-                std::io::ErrorKind::NotFound => {
-                    // Creating new device info with EDIT ME as product name
-                    let device_info = DeviceInfo::new(String::from("EDIT ME")).map_err(|err| {
-                        format!("Unexpected error when creating a new DeviceInfo: {}", err)
-                    })?;
-                    device_info
-                        .save()
-                        .map_err(|err| format!("Could not create a new device info: {}", err))?;
-                    device_info
-                }
-                _ => return Err(format!("Could not load device info: {}", io_error)),
-            },
-            _ => return Err(format!("Could not load device info: {}", load_error)),
-        },
-    };
-
-    // Check for EDIT ME product name
-    if device_info.product_name() == "EDIT ME" {
-        return Err(format!(
-            "Please edit the {:?} file and change the product name.",
-            device_info_path()
-        ));
-    }
-    Ok(device_info)
-}
-
 /// Entry Point for the Server Program
 #[rocket::main]
-async fn main() {
+async fn main() -> ExitCode {
     // Read .env file when available
     if dotenv::dotenv().is_ok() {
         println!("Loaded environment variables from .env file");
@@ -83,11 +43,28 @@ async fn main() {
     );
 
     // Try to load device info and use it to create device state
-    let device_info = match load_device_info() {
+    let device_info = match DeviceInfo::load() {
         Ok(device_info) => device_info,
-        Err(message) => {
-            eprintln!("{}", message);
-            return;
+        Err(error) => {
+            // Special message for file not found error
+            if let ErrorKind::IoError(io_error) = error.kind() {
+                if io_error.kind() == std::io::ErrorKind::NotFound {
+                    eprintln!(
+                        "Device information file {:?} not found.",
+                        device_info_path()
+                    );
+                    eprintln!("You can use create_device_info application to create it.");
+                    return ExitCode::FAILURE;
+                }
+            };
+
+            // Error message for any other error
+            eprintln!(
+                "Could not load device information file: {:?}",
+                device_info_path()
+            );
+            eprintln!("{}", error);
+            return ExitCode::FAILURE;
         }
     };
     let device_state = DeviceState::new(device_info);
@@ -127,9 +104,10 @@ async fn main() {
 
     // Check launch result
     match launch_result {
-        Ok(_) => (),
+        Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("Rocket had an error: {}", err);
+            ExitCode::FAILURE
         }
-    };
+    }
 }

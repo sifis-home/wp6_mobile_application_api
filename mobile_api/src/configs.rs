@@ -158,8 +158,7 @@ impl DeviceInfo {
     ///
     /// Tries to write device information to the given *file* as pretty JSON.
     pub fn save_to(&self, file: &Path) -> Result<()> {
-        let info_json = serde_json::to_string_pretty(&self)?;
-        fs::write(file, info_json.as_bytes())?;
+        fs::write(file, self.to_json(true)?.as_bytes())?;
         Ok(())
     }
 
@@ -199,6 +198,14 @@ impl DeviceInfo {
     /// Change UUID
     pub fn set_uuid(&mut self, uuid: Uuid) {
         self.uuid = uuid;
+    }
+
+    /// Convenience function to turn device information to JSON
+    pub fn to_json(&self, pretty: bool) -> Result<String> {
+        Ok(match pretty {
+            true => serde_json::to_string_pretty(&self)?,
+            false => serde_json::to_string(&self)?,
+        })
     }
 }
 
