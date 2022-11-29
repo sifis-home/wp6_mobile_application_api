@@ -6,8 +6,7 @@ edition = "2021"
 license-file = "../LICENSE"
 
 [dependencies]
-base64 = { version = "0.13.1" }
-clap = { features = [ "derive" ], version = "4.0.27" }
+clap = { features = [ "derive" ], version = "4.0.28" }
 dotenv = { version = "0.15.0" }
 mobile_api = { path = "../mobile_api" }
 qrcodegen = { version =  "1.8.0" }

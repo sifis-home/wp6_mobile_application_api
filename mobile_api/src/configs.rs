@@ -293,5 +293,15 @@ mod tests {
         let buf = rmp_serde::to_vec(&info_a).unwrap();
         let config_b = rmp_serde::from_slice::<DeviceInfo>(&buf).unwrap();
         assert_eq!(info_a, config_b);
+
+        // Both compact and pretty JSON should result identical DeviceInfo object
+        let compact_json = info_a.to_json(false).unwrap();
+        let pretty_json = info_a.to_json(true).unwrap();
+        assert_ne!(compact_json, pretty_json);
+        let info_b = serde_json::from_str::<DeviceInfo>(&compact_json).unwrap();
+        let info_c = serde_json::from_str::<DeviceInfo>(&pretty_json).unwrap();
+        assert_eq!(info_a, info_b);
+        assert_eq!(info_b, info_c);
+        assert_eq!(info_b, info_c);
     }
 }
