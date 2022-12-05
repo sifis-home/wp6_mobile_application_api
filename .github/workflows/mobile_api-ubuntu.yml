@@ -216,12 +216,14 @@ jobs:
           -Zmiri-symbolic-alignment-check
       run: cargo miri test
 
-    # FIXME Create a template with a dummy series of fuzzy tests
-    - name: Init cargo-fuzz
+      # FIXME Create a template with a dummy series of fuzzy tests
+    - name: Init cargo-fuzz [mobile_api]
       run: cargo fuzz init
+      working-directory: mobile_api
 
-    - name: Run cargo-fuzz
+    - name: Run cargo-fuzz [mobile_api]
       run: cargo fuzz build
+      working-directory: mobile_api
 
     - name: Run AddressSanitizer
       env:

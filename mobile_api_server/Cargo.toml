@@ -1,0 +1,24 @@
+[package]
+name = "mobile_api_server"
+authors = ["Ossi Saukko <ossi.saukko@centria.fi>", "Olli Isohanni <olli.isohanni@centria.fi>"]
+version = "0.1.0"
+edition = "2021"
+license-file = "../LICENSE"
+default-run = "mobile_api_server"
+
+[dependencies]
+dotenv = { version = "0.15.0" }
+mobile_api = { path = "../mobile_api" }
+rocket = { version = "0.5.0-rc.2", features = ["json", "uuid"] }
+rocket_okapi = { version = "0.8.0-rc.2", features = ["rapidoc", "swagger", "uuid"] }
+schemars = { version = "0.8.11" }
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = { version = "1.0.89" }
+sysinfo = { version = "0.26.7" }
+
+[dev-dependencies]
+assert_cmd = { version = "2.0.6" }
+nix = { version = "0.26.1", features = ["signal"] }
+predicates = { version = "2.1.3" }
+tempfile = { version = "3.3.0" }
+tokio = { version = "1.22.0", features = ["time", "process"] }
