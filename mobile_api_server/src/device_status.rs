@@ -4,10 +4,10 @@
 //! and sent to the client application in JSON format.
 
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Memory information
-#[derive(Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct MemStatus {
     /// Total available memory in bytes
     pub total: u64,
@@ -39,7 +39,7 @@ impl MemStatus {
     }
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// Disk information
 pub struct DiskStatus {
     /// Device file
@@ -63,7 +63,7 @@ pub struct DiskStatus {
     pub usage: f32,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 /// A collection of system information
 pub struct DeviceStatus {
     /// CPU usage per core

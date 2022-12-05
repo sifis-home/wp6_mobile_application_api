@@ -10,6 +10,9 @@ use rocket_okapi::openapi;
 use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::util::add_schema_response;
 
+#[cfg(test)]
+mod tests;
+
 /// Command HTTP responses
 #[derive(Responder)]
 pub enum CommandResponse {

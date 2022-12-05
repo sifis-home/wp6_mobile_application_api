@@ -10,6 +10,9 @@ use rocket::serde::json::Json;
 use rocket::{get, put, State};
 use rocket_okapi::openapi;
 
+#[cfg(test)]
+mod tests;
+
 /// # Device status
 ///
 /// This endpoint provides information about the status of the device, such as:

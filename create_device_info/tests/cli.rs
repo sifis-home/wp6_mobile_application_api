@@ -11,12 +11,14 @@ use tempfile::TempDir;
 const APP_NAME: &str = "create_device_info";
 
 // Test ignored for miri, because file operations are not available when isolation is enabled.
-// Test is also ignored when running AddressSanitizer, because for some reason the file rights are
-// not respected and the program is able to create a new folder even though the folder should not
-// have any rights -> Unexpected success failure
-#[cfg_attr(any(miri, feature = "asan"), ignore)]
+#[cfg_attr(miri, ignore)]
 #[test]
 fn test_errors_with_output_path() -> Result<(), Box<dyn Error>> {
+    if users::get_current_uid() == 0 {
+        println!("Warning: skipping this test because the permission check doesn't work for root.");
+        return Ok(());
+    }
+
     // Making directory without permissions
     let tmp_dir = TempDir::new()?;
     fs::set_permissions(tmp_dir.path(), fs::Permissions::from_mode(0o000))?;

@@ -7,7 +7,7 @@
 //!
 //! * `SIFIS_HOME_PATH` - The path where the device settings are stored
 //! * `ROCKET_ADDRESS` - Ip address or host to listen on
-//! * `ROCKER_PORT` - Port number to listen on
+//! * `ROCKET_PORT` - Port number to listen on
 //!
 //! These environment variables can be set in the `.env` file. This file is used during the
 //! development to store configurations in the program's local directory.
@@ -19,6 +19,7 @@ use mobile_api::configs::DeviceInfo;
 use mobile_api::error::ErrorKind;
 use mobile_api::{device_info_path, sifis_home_path};
 use rocket::fs::{relative, FileServer};
+use rocket::{Build, Rocket};
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
@@ -69,6 +70,23 @@ async fn main() -> ExitCode {
     };
     let device_state = DeviceState::new(device_info);
 
+    let launch_result = build_rocket(device_state).launch().await;
+
+    // Check launch result
+    match launch_result {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("Rocket had an error: {}", err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Builds Mobile API Rocket
+///
+/// This function creates a Rocket object that is ready to launch. Rocket is created from the main
+/// function, but also unit tests use this function to check endpoints using local instances.
+fn build_rocket(state: DeviceState) -> Rocket<Build> {
     // Prepare configuration for API documentation.
     let rapidoc_config = RapiDocConfig {
         title: Some("Smart Device Mobile API | Documentation".to_string()),
@@ -89,9 +107,9 @@ async fn main() -> ExitCode {
     };
 
     // Launch server
-    let launch_result = rocket::build()
+    rocket::build()
         // Manage state through DeviceState object
-        .manage(device_state)
+        .manage(state)
         // Mount static files to root
         .mount("/", FileServer::from(relative!("static")))
         // Mount APIv1
@@ -99,15 +117,4 @@ async fn main() -> ExitCode {
         // API documentation from the implementation
         .mount("/v1/rapidoc/", make_rapidoc(&rapidoc_config))
         .mount("/v1/swagger-ui/", make_swagger_ui(&swagger_ui_config))
-        .launch()
-        .await;
-
-    // Check launch result
-    match launch_result {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("Rocket had an error: {}", err);
-            ExitCode::FAILURE
-        }
-    }
 }

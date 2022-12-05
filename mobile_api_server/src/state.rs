@@ -6,8 +6,12 @@
 use crate::device_status::{DeviceStatus, DiskStatus, MemStatus};
 use mobile_api::configs::{DeviceConfig, DeviceInfo};
 use std::cmp::Ordering;
+use std::ops::Deref;
 use std::sync::{Mutex, RwLock};
 use sysinfo::{CpuExt, CpuRefreshKind, Disk, DiskExt, RefreshKind, System, SystemExt};
+
+#[cfg(test)]
+mod tests;
 
 /// Managed state structure
 pub struct DeviceState {
@@ -58,10 +62,16 @@ impl DeviceState {
         }
     }
 
+    /// Check if server is busy
+    ///
+    /// Returns busy reason or empty str if server is free
+    pub fn busy(&self) -> &'static str {
+        self.busy_reason.lock().unwrap().deref()
+    }
+
     /// Clearing server busy status
     pub fn clear_busy(&self) {
         *self.busy_reason.lock().unwrap() = "";
-        println!("Busy: [RESET]");
     }
 
     /// Requesting system status
@@ -134,7 +144,6 @@ impl DeviceState {
         let mut guard = self.busy_reason.lock().unwrap();
         if guard.is_empty() {
             *guard = reason;
-            println!("Busy: {}", reason);
             Ok(())
         } else {
             Err(*guard)
