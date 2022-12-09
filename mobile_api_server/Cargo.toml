@@ -22,3 +22,4 @@ nix = { version = "0.26.1", features = ["signal"] }
 predicates = { version = "2.1.3" }
 tempfile = { version = "3.3.0" }
 tokio = { version = "1.22.0", features = ["time", "process"] }
+zbus = { version = "3.6.1", default-features = false, features = ["tokio"] }

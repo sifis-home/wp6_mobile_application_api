@@ -19,7 +19,6 @@ fn test_status() {
 // functions that are not available in isolation mode
 #[cfg_attr(miri, ignore)]
 #[test]
-#[should_panic] // Not implemented
 fn test_configuration() {
     let uri = "/v1/device/configuration";
 

@@ -49,7 +49,7 @@ async fn test_server_binary() -> Result<(), Box<dyn Error>> {
             "You can use create_device_info application to create it.",
         ));
 
-    // Server should shut down gracefully with SIGINT signal
+    // Server should shut down gracefully with SIGTERM signal
     tokio::select! {
         result = test_graceful_shutdown() => {
             assert!(result.is_ok());
@@ -65,7 +65,7 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
     // Running with valgrind?
     if let Ok(value) = std::env::var("LD_PRELOAD") {
         if value.contains("/valgrind/") || value.contains("/vgpreload") {
-            println!("The graceful shutdown test was skipped because we cannot send SIGINT for");
+            println!("The graceful shutdown test was skipped because we cannot send SIGTERM for");
             println!("the server when it is run within the Valgrind checking tool.");
             return Ok(());
         }
@@ -77,7 +77,7 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
     // This test does the following:
     //
     // 1. Look for "Rocket has launched from" message from the server
-    // 2. Send SIGINT (Ctrl+C)
+    // 2. Send SIGTERM signal for the server
     // 3. Wait for the server to shutdown
     // 4. Check for graceful shutdown
 
@@ -94,10 +94,10 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
     let mut stdout_reader = BufReader::new(stdout).lines();
     let mut stderr_reader = BufReader::new(stderr).lines();
     let server_pid = Pid::from_raw(server.id().unwrap() as i32);
-    let mut sigint_thread_handle: Option<JoinHandle<()>> = None;
+    let mut sigterm_thread_handle: Option<JoinHandle<()>> = None;
 
-    // A message channel for telling the SIGINT sender to stop
-    let (sigint_tx, _) = broadcast::channel::<()>(1);
+    // A message channel for telling the SIGTERM sender to stop
+    let (sigterm_tx, _) = broadcast::channel::<()>(1);
 
     // Asynchronous processing until server gracefully shutdowns or something goes wrong
     loop {
@@ -107,10 +107,10 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
                     Ok(Some(line)) => {
                         println!("stdout: {}", line);
                         if line.contains("Rocket has launched from") {
-                            // Server started successfully, start sending SIGINT for it
-                            let rx = sigint_tx.subscribe();
-                            sigint_thread_handle = Some(thread::spawn(move || {
-                                sigint_sender(server_pid, rx);
+                            // Server started successfully, start sending SIGTERM for it
+                            let rx = sigterm_tx.subscribe();
+                            sigterm_thread_handle = Some(thread::spawn(move || {
+                                sigterm_sender(server_pid, rx);
                             }));
                         } else if line.contains("Graceful shutdown completed successfully") {
                             // Test went okay, we can break out of the loop
@@ -131,9 +131,9 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Tell SIGINT sender to stop and wait it to complete
-    sigint_tx.send(()).unwrap();
-    if let Some(handle) = sigint_thread_handle {
+    // Tell SIGTERM sender to stop and wait it to complete
+    sigterm_tx.send(()).unwrap();
+    if let Some(handle) = sigterm_thread_handle {
         handle.join().unwrap();
     }
 
@@ -146,13 +146,14 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn sigint_sender(pid: Pid, mut rx: broadcast::Receiver<()>) {
+fn sigterm_sender(pid: Pid, mut rx: broadcast::Receiver<()>) {
+    sleep(Duration::from_millis(100));
     loop {
+        println!("Sending SIGTERM for process {}", pid);
+        signal::kill(pid, Some(Signal::SIGTERM)).expect("Could not send SIGTERM");
         sleep(Duration::from_millis(100));
-        println!("Sending SIGINT for process {}", pid);
-        signal::kill(pid, Some(Signal::SIGINT)).expect("Could not send SIGINT");
         match rx.try_recv() {
-            Err(TryRecvError::Empty) => (), // Try sending SIGINT again
+            Err(TryRecvError::Empty) => (), // Try sending SIGTERM again
             _ => break,
         };
     }

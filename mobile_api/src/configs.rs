@@ -21,7 +21,7 @@ use uuid::Uuid;
 mod tests;
 
 /// Smart Device Configuration
-#[derive(Debug, Deserialize, Eq, PartialEq, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, JsonSchema, Serialize)]
 pub struct DeviceConfig {
     /// User-defined name for the Smart Device
     name: String,

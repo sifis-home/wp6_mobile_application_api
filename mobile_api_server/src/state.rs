@@ -5,7 +5,9 @@
 
 use crate::device_status::{DeviceStatus, DiskStatus, MemStatus};
 use mobile_api::configs::{DeviceConfig, DeviceInfo};
+use mobile_api::device_config_path;
 use std::cmp::Ordering;
+use std::io::ErrorKind;
 use std::ops::Deref;
 use std::sync::{Mutex, RwLock};
 use sysinfo::{CpuExt, CpuRefreshKind, Disk, DiskExt, RefreshKind, System, SystemExt};
@@ -19,10 +21,10 @@ pub struct DeviceState {
     busy_reason: Mutex<&'static str>,
 
     /// Device configuration
-    _device_config: RwLock<Option<DeviceConfig>>,
+    device_config: RwLock<Option<DeviceConfig>>,
 
     /// Device information
-    _device_info: RwLock<DeviceInfo>,
+    device_info: DeviceInfo,
 
     /// An object for querying the system status
     sys_info: Mutex<System>,
@@ -42,8 +44,10 @@ impl DeviceState {
     /// Device info is prepared before starting the server
     pub fn new(device_info: DeviceInfo) -> DeviceState {
         let busy_reason = Mutex::new("");
-        let _device_config = RwLock::new(None);
-        let _device_info = RwLock::new(device_info);
+        let device_config = RwLock::new(match DeviceConfig::load() {
+            Ok(config) => Some(config),
+            _ => None,
+        });
 
         let sys_info_refreshes = RefreshKind::new()
             .with_cpu(CpuRefreshKind::new().with_cpu_usage())
@@ -55,8 +59,8 @@ impl DeviceState {
 
         DeviceState {
             busy_reason,
-            _device_config,
-            _device_info,
+            device_config,
+            device_info,
             sys_info,
             sys_info_refreshes,
         }
@@ -74,6 +78,18 @@ impl DeviceState {
         *self.busy_reason.lock().unwrap() = "";
     }
 
+    /// Set server busy reason message
+    ///
+    /// See also: [BusyGuard]
+    pub fn set_busy(&self, reason: &'static str) -> Result<(), &'static str> {
+        let mut guard = self.busy_reason.lock().unwrap();
+        if guard.is_empty() {
+            *guard = reason;
+            Ok(())
+        } else {
+            Err(*guard)
+        }
+    }
     /// Requesting system status
     pub fn device_status(&self) -> DeviceStatus {
         let mut sys_info = self.sys_info.lock().unwrap();
@@ -137,17 +153,42 @@ impl DeviceState {
         }
     }
 
-    /// Set server busy reason message
-    ///
-    /// See also: [BusyGuard]
-    pub fn set_busy(&self, reason: &'static str) -> Result<(), &'static str> {
-        let mut guard = self.busy_reason.lock().unwrap();
-        if guard.is_empty() {
-            *guard = reason;
-            Ok(())
+    /// Get a copy current config if available
+    pub fn get_config(&self) -> Option<DeviceConfig> {
+        if let Ok(config) = self.device_config.read() {
+            config.clone()
         } else {
-            Err(*guard)
+            None
         }
+    }
+
+    /// Set new config
+    ///
+    /// Given config is written to `config.json` file.
+    /// Sending None will delete `config.json` file.
+    pub fn set_config(
+        &self,
+        config: Option<DeviceConfig>,
+    ) -> Result<(), Box<dyn std::error::Error + '_>> {
+        let mut write_lock = self.device_config.write()?;
+        match &config {
+            None => {
+                if let Err(err) = std::fs::remove_file(device_config_path()) {
+                    match err.kind() {
+                        ErrorKind::NotFound => (),   // This is okay
+                        _ => return Err(err.into()), // Anything else is error
+                    }
+                }
+            }
+            Some(config) => config.save()?,
+        }
+        *write_lock = config;
+        Ok(())
+    }
+
+    /// Access device info reference
+    pub fn device_info(&self) -> &DeviceInfo {
+        &self.device_info
     }
 }
 

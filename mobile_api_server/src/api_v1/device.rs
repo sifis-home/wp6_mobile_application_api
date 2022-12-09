@@ -2,13 +2,16 @@
 //!
 //! These endpoints allow Mobile Application to check device status, read and set configuration.
 
+use crate::api_common::*;
 use crate::device_status::DeviceStatus;
-use crate::state::DeviceState;
+use crate::state::{BusyGuard, DeviceState};
 use mobile_api::configs::DeviceConfig;
-use rocket::http::Status;
 use rocket::serde::json::Json;
-use rocket::{get, put, State};
+use rocket::{get, put, Responder, State};
+use rocket_okapi::gen::OpenApiGenerator;
+use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::openapi;
+use rocket_okapi::response::OpenApiResponderInner;
 
 #[cfg(test)]
 mod tests;
@@ -29,8 +32,20 @@ mod tests;
 ///
 #[openapi(tag = "Device")]
 #[get("/device/status")]
-pub async fn status(state: &State<DeviceState>) -> Json<DeviceStatus> {
-    Json(state.device_status())
+pub async fn status(state: &State<DeviceState>) -> StatusResponse {
+    StatusResponse::Ok(Json(state.device_status()))
+}
+
+#[derive(Responder)]
+pub enum StatusResponse {
+    #[response(status = 200, content_type = "json")]
+    Ok(Json<DeviceStatus>),
+}
+
+impl OpenApiResponderInner for StatusResponse {
+    fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+        make_json_responses(vec![(200, gen.json_schema::<DeviceStatus>(), None)])
+    }
 }
 
 /// # Device configuration
@@ -39,8 +54,35 @@ pub async fn status(state: &State<DeviceState>) -> Json<DeviceStatus> {
 /// Use PUT /device/configuration to set the configuration.
 #[openapi(tag = "Device")]
 #[get("/device/configuration")]
-pub async fn get_config() -> Result<Json<DeviceConfig>, Status> {
-    Err(Status::NotFound)
+pub async fn get_config(state: &State<DeviceState>) -> GetConfigResponse {
+    match state.get_config() {
+        None => GetConfigResponse::NotFound(ErrorResponse::not_found(Some(
+            "This device has not been configured yet.",
+        ))),
+        Some(config) => GetConfigResponse::Ok(Json(config)),
+    }
+}
+
+#[derive(Responder)]
+pub enum GetConfigResponse {
+    #[response(status = 200, content_type = "json")]
+    Ok(Json<DeviceConfig>),
+
+    #[response(status = 404, content_type = "json")]
+    NotFound(Json<ErrorResponse>),
+}
+
+impl OpenApiResponderInner for GetConfigResponse {
+    fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+        make_json_responses(vec![
+            (200, gen.json_schema::<DeviceConfig>(), None),
+            (
+                404,
+                gen.json_schema::<ErrorResponse>(),
+                Some("This device has not been configured yet."),
+            ),
+        ])
+    }
 }
 
 /// # Set device configuration
@@ -49,7 +91,17 @@ pub async fn get_config() -> Result<Json<DeviceConfig>, Status> {
 /// must be restarted using the `/commands/restart` endpoint.
 #[openapi(tag = "Device")]
 #[put("/device/configuration", data = "<config>")]
-pub async fn set_config(config: Json<DeviceConfig>) -> &'static str {
-    println!("Got configuration: {:#?}", config);
-    "Not implemented yet"
+pub async fn set_config(
+    state: &State<DeviceState>,
+    config: Json<DeviceConfig>,
+) -> OkErrorBusyResponse {
+    match BusyGuard::try_busy(state, "Saving device configuration.") {
+        Ok(_) => match state.set_config(Some(config.0)) {
+            Ok(_) => OkErrorBusyResponse::Ok(OkResponse::message("Configuration saved.")),
+            Err(error) => {
+                OkErrorBusyResponse::Error(ErrorResponse::internal_server_error(error.to_string()))
+            }
+        },
+        Err(busy) => OkErrorBusyResponse::Busy(ErrorResponse::service_unavailable(busy)),
+    }
 }

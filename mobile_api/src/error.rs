@@ -93,3 +93,5 @@ impl From<std::time::SystemTimeError> for Error {
         Error::new(ErrorKind::TimeError(err))
     }
 }
+
+impl std::error::Error for Error {}

@@ -6,6 +6,7 @@
 //! The following environment variables change the behavior of this server program.
 //!
 //! * `SIFIS_HOME_PATH` - The path where the device settings are stored
+//! * `MOBILE_API_SCRIPTS_PATH` - The path where command scripts are stored
 //! * `ROCKET_ADDRESS` - Ip address or host to listen on
 //! * `ROCKET_PORT` - Port number to listen on
 //!
@@ -25,6 +26,7 @@ use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use std::process::ExitCode;
 
+pub mod api_common;
 pub mod api_v1;
 pub mod device_status;
 pub mod state;
