@@ -5,18 +5,17 @@
 
 use crate::device_status::{DeviceStatus, DiskStatus, MemStatus};
 use mobile_api::configs::{DeviceConfig, DeviceInfo};
-use mobile_api::device_config_path;
+use mobile_api::SifisHome;
 use std::cmp::Ordering;
-use std::io::ErrorKind;
 use std::ops::Deref;
 use std::sync::{Mutex, RwLock};
 use sysinfo::{CpuExt, CpuRefreshKind, Disk, DiskExt, RefreshKind, System, SystemExt};
 
-#[cfg(test)]
-mod tests;
-
 /// Managed state structure
 pub struct DeviceState {
+    /// SIFIS Home configurations instance
+    sifis_home: SifisHome,
+
     /// Reason message, why is the server busy
     busy_reason: Mutex<&'static str>,
 
@@ -41,13 +40,36 @@ fn sort_disks_by_device_name(a: &Disk, b: &Disk) -> Ordering {
 impl DeviceState {
     /// Creating server state object
     ///
-    /// Device info is prepared before starting the server
-    pub fn new(device_info: DeviceInfo) -> DeviceState {
+    /// Function tries to load device info and return DeviceState for the server on success.
+    ///
+    /// If something goes wrong, then message is returned as error
+    pub fn new(sifis_home: SifisHome) -> Result<DeviceState, String> {
+        // Try to load device info
+        let device_info = match sifis_home.load_info() {
+            Ok(device_info) => device_info,
+            Err(error) => {
+                // Special message for file not found error
+                if let mobile_api::error::ErrorKind::IoError(io_error) = error.kind() {
+                    if io_error.kind() == std::io::ErrorKind::NotFound {
+                        return Err(format!(
+                            "Device information file {:?} not found.\n\
+                             You can use create_device_info application to create it.",
+                            sifis_home.info_file_path()
+                        ));
+                    }
+                };
+
+                // Error message for any other error
+                return Err(format!(
+                    "Could not load device information file: {:?}\n{}",
+                    sifis_home.info_file_path(),
+                    error
+                ));
+            }
+        };
+
         let busy_reason = Mutex::new("");
-        let device_config = RwLock::new(match DeviceConfig::load() {
-            Ok(config) => Some(config),
-            _ => None,
-        });
+        let device_config = RwLock::new(sifis_home.load_config().ok());
 
         let sys_info_refreshes = RefreshKind::new()
             .with_cpu(CpuRefreshKind::new().with_cpu_usage())
@@ -57,13 +79,14 @@ impl DeviceState {
         sys.refresh_specifics(sys_info_refreshes);
         let sys_info = Mutex::new(sys);
 
-        DeviceState {
+        Ok(DeviceState {
+            sifis_home,
             busy_reason,
             device_config,
             device_info,
             sys_info,
             sys_info_refreshes,
-        }
+        })
     }
 
     /// Check if server is busy
@@ -172,15 +195,8 @@ impl DeviceState {
     ) -> Result<(), Box<dyn std::error::Error + '_>> {
         let mut write_lock = self.device_config.write()?;
         match &config {
-            None => {
-                if let Err(err) = std::fs::remove_file(device_config_path()) {
-                    match err.kind() {
-                        ErrorKind::NotFound => (),   // This is okay
-                        _ => return Err(err.into()), // Anything else is error
-                    }
-                }
-            }
-            Some(config) => config.save()?,
+            None => self.sifis_home.remove_config()?,
+            Some(config) => self.sifis_home.save_config(config)?,
         }
         *write_lock = config;
         Ok(())
@@ -236,5 +252,37 @@ impl Drop for BusyGuard<'_> {
     /// Clearing busy message when guardian goes out of scope
     fn drop(&mut self) {
         self.state.clear_busy();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api_v1::tests_common::create_test_state;
+
+    // Test ignored for Miri because the server has time and io-related
+    // functions that are not available in isolation mode
+    #[cfg_attr(miri, ignore)]
+    #[test]
+    fn test_busy_guard() {
+        // Shouldn't be busy at start
+        let (_, state) = create_test_state();
+        assert_eq!(state.busy(), "");
+
+        // Making "server" busy
+        let busy_message = "Testing BusyGuard";
+        {
+            let guard = BusyGuard::try_busy(&state, busy_message);
+            assert!(guard.is_ok());
+            assert_eq!(state.busy(), busy_message);
+
+            // Second guard should also fail with the busy message
+            let result = BusyGuard::try_busy(&state, busy_message);
+            assert!(result.is_err());
+            assert_eq!(result.err().unwrap(), busy_message);
+        }
+
+        // Busy guard went out of scope, "server" should be free now.
+        assert_eq!(state.busy(), "");
     }
 }

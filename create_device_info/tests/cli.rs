@@ -19,9 +19,9 @@ fn test_errors_with_output_path() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    // Making directory without permissions
+    // Making directory without write permission
     let tmp_dir = TempDir::new()?;
-    fs::set_permissions(tmp_dir.path(), fs::Permissions::from_mode(0o000))?;
+    fs::set_permissions(tmp_dir.path(), fs::Permissions::from_mode(0o555))?;
 
     // App should give error when trying to create a new directory to write protected one
     let mut new_dir = PathBuf::from(tmp_dir.path());

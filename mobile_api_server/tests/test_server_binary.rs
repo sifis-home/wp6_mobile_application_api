@@ -1,6 +1,6 @@
 use assert_cmd::cargo::cargo_bin;
 use assert_cmd::prelude::*;
-use mobile_api::configs::DeviceInfo;
+use mobile_api::SifisHome;
 use nix::sys::signal;
 use nix::sys::signal::Signal;
 use nix::unistd::Pid;
@@ -72,7 +72,9 @@ async fn test_graceful_shutdown() -> Result<(), Box<dyn Error>> {
     }
 
     // Saving a test device.json to start the server
-    DeviceInfo::new("Test".to_string()).unwrap().save().unwrap();
+    let sifis_home = SifisHome::new();
+    let device_info = sifis_home.new_info("Test".to_string()).unwrap();
+    sifis_home.save_info(&device_info).unwrap();
 
     // This test does the following:
     //

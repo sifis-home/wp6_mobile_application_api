@@ -2,10 +2,12 @@ use crate::build_rocket;
 use crate::state::DeviceState;
 use mobile_api::configs::{DeviceConfig, DeviceInfo};
 use mobile_api::security::SecurityKey;
+use mobile_api::SifisHome;
 use rocket::local::blocking::Client;
 use rocket::serde::uuid::Uuid;
 use std::path::PathBuf;
 use std::time::Duration;
+use tempfile::TempDir;
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -18,8 +20,6 @@ pub const TEST_AUTH_KEY: SecurityKey = SecurityKey::from_bytes([
 
 pub const TEST_DEVICE_NAME: &str = "Test Device";
 
-pub const TEST_PRIVATE_KEY_FILE: &str = "target/tests/sifis-home/private.pem";
-
 pub const TEST_PRODUCT_NAME: &str = "Test Product";
 
 pub const TEST_SHARED_DHT_KEY: SecurityKey = SecurityKey::from_bytes([
@@ -31,21 +31,40 @@ pub const TEST_UUID: Uuid = Uuid::from_bytes([
     0x12, 0x3e, 0x45, 0x67, 0xe8, 0x9b, 0x12, 0xd3, 0xa4, 0x56, 0x42, 0x66, 0x14, 0x17, 0x40, 0x00,
 ]);
 
-pub fn make_test_device_config() -> DeviceConfig {
+pub fn create_test_config() -> DeviceConfig {
     DeviceConfig::new(TEST_SHARED_DHT_KEY, TEST_DEVICE_NAME.to_string())
 }
 
-pub fn make_test_device_state() -> DeviceState {
-    DeviceState::new(DeviceInfo::from(
+#[must_use]
+pub fn create_test_state() -> (TempDir, DeviceState) {
+    // Making SifisHome object pointing to temporary directory
+    let test_dir = TempDir::new().unwrap();
+    let mut sifis_home_path = PathBuf::from(test_dir.path());
+    sifis_home_path.push("sifis-home");
+    std::fs::create_dir_all(&sifis_home_path).unwrap();
+    let sifis_home = SifisHome::new_with_path(sifis_home_path);
+
+    // Making DeviceInfo using the SifisHome we created and saving it
+    let mut private_key_path = PathBuf::from(sifis_home.home_path());
+    private_key_path.push("private.pem");
+    let device_info = DeviceInfo::new(
         TEST_PRODUCT_NAME.to_string(),
         TEST_AUTH_KEY,
-        PathBuf::from(TEST_PRIVATE_KEY_FILE),
+        private_key_path,
         TEST_UUID,
-    ))
+    );
+    sifis_home.save_info(&device_info).unwrap();
+
+    // Making DeviceState using the above
+    let device_state = DeviceState::new(sifis_home).unwrap();
+    (test_dir, device_state)
 }
 
-pub fn make_test_client() -> Client {
-    Client::tracked(build_rocket(make_test_device_state())).unwrap()
+#[must_use]
+pub fn create_test_setup() -> (TempDir, Client) {
+    let (test_dir, device_state) = create_test_state();
+    let client = Client::tracked(build_rocket(device_state)).unwrap();
+    (test_dir, client)
 }
 
 struct DbusTestingListener {

@@ -13,9 +13,6 @@ use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::openapi;
 use rocket_okapi::response::OpenApiResponderInner;
 
-#[cfg(test)]
-mod tests;
-
 /// # Device status
 ///
 /// This endpoint provides information about the status of the device, such as:
@@ -36,13 +33,16 @@ pub async fn status(state: &State<DeviceState>) -> StatusResponse {
     StatusResponse::Ok(Json(state.device_status()))
 }
 
+/// Status Endpoint Response
 #[derive(Responder)]
 pub enum StatusResponse {
+    /// Status is always available and returns status information with 200 OK response.
     #[response(status = 200, content_type = "json")]
     Ok(Json<DeviceStatus>),
 }
 
 impl OpenApiResponderInner for StatusResponse {
+    /// Generating responses for the status endpoint
     fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
         make_json_responses(vec![(200, gen.json_schema::<DeviceStatus>(), None)])
     }
@@ -63,16 +63,20 @@ pub async fn get_config(state: &State<DeviceState>) -> GetConfigResponse {
     }
 }
 
+/// Possible responses for the configuration GET endpoint
 #[derive(Responder)]
 pub enum GetConfigResponse {
+    /// 200 OK, configuration is available
     #[response(status = 200, content_type = "json")]
     Ok(Json<DeviceConfig>),
 
+    /// 404 Not Found, configuration is not done
     #[response(status = 404, content_type = "json")]
     NotFound(Json<ErrorResponse>),
 }
 
 impl OpenApiResponderInner for GetConfigResponse {
+    /// Generating responses for the configuration GET endpoint
     fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
         make_json_responses(vec![
             (200, gen.json_schema::<DeviceConfig>(), None),
@@ -103,5 +107,56 @@ pub async fn set_config(
             }
         },
         Err(busy) => OkErrorBusyResponse::Busy(ErrorResponse::service_unavailable(busy)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::api_v1::tests_common::{create_test_config, create_test_setup};
+    use crate::device_status::DeviceStatus;
+    use mobile_api::configs::DeviceConfig;
+    use rocket::http::{ContentType, Status};
+
+    // Test ignored for Miri because the server has time and io-related
+    // functions that are not available in isolation mode
+    #[cfg_attr(miri, ignore)]
+    #[test]
+    fn test_status() {
+        let (_test_dir, client) = create_test_setup();
+
+        let response = client.get("/v1/device/status").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        let device_status = response.into_json::<DeviceStatus>();
+        assert!(device_status.is_some());
+    }
+
+    // Test ignored for Miri because the server has time and io-related
+    // functions that are not available in isolation mode
+    #[cfg_attr(miri, ignore)]
+    #[test]
+    fn test_configuration() {
+        let uri = "/v1/device/configuration";
+
+        // Should not have config yet
+        let (_test_dir, client) = create_test_setup();
+        let response = client.get(uri).dispatch();
+        assert_eq!(response.status(), Status::NotFound);
+
+        // Sending test configuration
+        let test_config = create_test_config();
+        let test_config_json = serde_json::to_string(&test_config).unwrap();
+        let response = client
+            .put(uri)
+            .header(ContentType::JSON)
+            .body(test_config_json)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        // Should have the same config now
+        let response = client.get(uri).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let config = response.into_json::<DeviceConfig>().unwrap();
+        assert_eq!(config, test_config);
     }
 }
