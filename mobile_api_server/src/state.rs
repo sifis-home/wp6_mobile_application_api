@@ -5,24 +5,25 @@
 
 use crate::device_status::{DeviceStatus, DiskStatus, MemStatus};
 use mobile_api::configs::{DeviceConfig, DeviceInfo};
+use mobile_api::SifisHome;
 use std::cmp::Ordering;
 use std::ops::Deref;
 use std::sync::{Mutex, RwLock};
 use sysinfo::{CpuExt, CpuRefreshKind, Disk, DiskExt, RefreshKind, System, SystemExt};
 
-#[cfg(test)]
-mod tests;
-
 /// Managed state structure
 pub struct DeviceState {
+    /// SIFIS Home configurations instance
+    sifis_home: SifisHome,
+
     /// Reason message, why is the server busy
     busy_reason: Mutex<&'static str>,
 
     /// Device configuration
-    _device_config: RwLock<Option<DeviceConfig>>,
+    device_config: RwLock<Option<DeviceConfig>>,
 
     /// Device information
-    _device_info: RwLock<DeviceInfo>,
+    device_info: DeviceInfo,
 
     /// An object for querying the system status
     sys_info: Mutex<System>,
@@ -39,11 +40,36 @@ fn sort_disks_by_device_name(a: &Disk, b: &Disk) -> Ordering {
 impl DeviceState {
     /// Creating server state object
     ///
-    /// Device info is prepared before starting the server
-    pub fn new(device_info: DeviceInfo) -> DeviceState {
+    /// Function tries to load device info and return DeviceState for the server on success.
+    ///
+    /// If something goes wrong, then message is returned as error
+    pub fn new(sifis_home: SifisHome) -> Result<DeviceState, String> {
+        // Try to load device info
+        let device_info = match sifis_home.load_info() {
+            Ok(device_info) => device_info,
+            Err(error) => {
+                // Special message for file not found error
+                if let mobile_api::error::ErrorKind::IoError(io_error) = error.kind() {
+                    if io_error.kind() == std::io::ErrorKind::NotFound {
+                        return Err(format!(
+                            "Device information file {:?} not found.\n\
+                             You can use create_device_info application to create it.",
+                            sifis_home.info_file_path()
+                        ));
+                    }
+                };
+
+                // Error message for any other error
+                return Err(format!(
+                    "Could not load device information file: {:?}\n{}",
+                    sifis_home.info_file_path(),
+                    error
+                ));
+            }
+        };
+
         let busy_reason = Mutex::new("");
-        let _device_config = RwLock::new(None);
-        let _device_info = RwLock::new(device_info);
+        let device_config = RwLock::new(sifis_home.load_config().ok());
 
         let sys_info_refreshes = RefreshKind::new()
             .with_cpu(CpuRefreshKind::new().with_cpu_usage())
@@ -53,13 +79,14 @@ impl DeviceState {
         sys.refresh_specifics(sys_info_refreshes);
         let sys_info = Mutex::new(sys);
 
-        DeviceState {
+        Ok(DeviceState {
+            sifis_home,
             busy_reason,
-            _device_config,
-            _device_info,
+            device_config,
+            device_info,
             sys_info,
             sys_info_refreshes,
-        }
+        })
     }
 
     /// Check if server is busy
@@ -74,6 +101,18 @@ impl DeviceState {
         *self.busy_reason.lock().unwrap() = "";
     }
 
+    /// Set server busy reason message
+    ///
+    /// See also: [BusyGuard]
+    pub fn set_busy(&self, reason: &'static str) -> Result<(), &'static str> {
+        let mut guard = self.busy_reason.lock().unwrap();
+        if guard.is_empty() {
+            *guard = reason;
+            Ok(())
+        } else {
+            Err(*guard)
+        }
+    }
     /// Requesting system status
     pub fn device_status(&self) -> DeviceStatus {
         let mut sys_info = self.sys_info.lock().unwrap();
@@ -137,17 +176,35 @@ impl DeviceState {
         }
     }
 
-    /// Set server busy reason message
-    ///
-    /// See also: [BusyGuard]
-    pub fn set_busy(&self, reason: &'static str) -> Result<(), &'static str> {
-        let mut guard = self.busy_reason.lock().unwrap();
-        if guard.is_empty() {
-            *guard = reason;
-            Ok(())
+    /// Get a copy current config if available
+    pub fn get_config(&self) -> Option<DeviceConfig> {
+        if let Ok(config) = self.device_config.read() {
+            config.clone()
         } else {
-            Err(*guard)
+            None
         }
+    }
+
+    /// Set new config
+    ///
+    /// Given config is written to `config.json` file.
+    /// Sending None will delete `config.json` file.
+    pub fn set_config(
+        &self,
+        config: Option<DeviceConfig>,
+    ) -> Result<(), Box<dyn std::error::Error + '_>> {
+        let mut write_lock = self.device_config.write()?;
+        match &config {
+            None => self.sifis_home.remove_config()?,
+            Some(config) => self.sifis_home.save_config(config)?,
+        }
+        *write_lock = config;
+        Ok(())
+    }
+
+    /// Access device info reference
+    pub fn device_info(&self) -> &DeviceInfo {
+        &self.device_info
     }
 }
 
@@ -195,5 +252,37 @@ impl Drop for BusyGuard<'_> {
     /// Clearing busy message when guardian goes out of scope
     fn drop(&mut self) {
         self.state.clear_busy();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api_v1::tests_common::create_test_state;
+
+    // Test ignored for Miri because the server has time and io-related
+    // functions that are not available in isolation mode
+    #[cfg_attr(miri, ignore)]
+    #[test]
+    fn test_busy_guard() {
+        // Shouldn't be busy at start
+        let (_, state) = create_test_state();
+        assert_eq!(state.busy(), "");
+
+        // Making "server" busy
+        let busy_message = "Testing BusyGuard";
+        {
+            let guard = BusyGuard::try_busy(&state, busy_message);
+            assert!(guard.is_ok());
+            assert_eq!(state.busy(), busy_message);
+
+            // Second guard should also fail with the busy message
+            let result = BusyGuard::try_busy(&state, busy_message);
+            assert!(result.is_err());
+            assert_eq!(result.err().unwrap(), busy_message);
+        }
+
+        // Busy guard went out of scope, "server" should be free now.
+        assert_eq!(state.busy(), "");
     }
 }

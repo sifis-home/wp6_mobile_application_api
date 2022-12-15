@@ -5,8 +5,7 @@
 //! variable or with the -o option.
 
 use clap::Parser;
-use mobile_api::configs::DeviceInfo;
-use mobile_api::device_info_path;
+use mobile_api::SifisHome;
 use qrcodegen::{QrCode, QrCodeEcc, QrSegment};
 use std::fs;
 use std::path::PathBuf;
@@ -52,13 +51,16 @@ fn main() -> ExitCode {
         println!("Loaded environment variables from .env file");
     }
 
+    // Create default SifisHome instance
+    let sifis_home = SifisHome::new();
+
     // Check if output path option is given or use default path
     let device_info_file = match arguments.output_path {
         Some(mut path) => {
             path.push("device.json");
             path
         }
-        None => device_info_path(),
+        None => sifis_home.info_file_path(),
     };
 
     // Stop if the device.json file already exists and force option is not given
@@ -81,8 +83,9 @@ fn main() -> ExitCode {
     }
 
     // Create device info and update the private key path if it was given
-    let mut device_info =
-        DeviceInfo::new(arguments.product_name).expect("Could not create a new device info");
+    let mut device_info = sifis_home
+        .new_info(arguments.product_name)
+        .expect("Could not create a new device info");
     if let Some(private_key) = arguments.private_key {
         device_info.set_private_key_file(private_key);
     }

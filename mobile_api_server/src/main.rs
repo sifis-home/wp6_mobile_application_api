@@ -6,6 +6,7 @@
 //! The following environment variables change the behavior of this server program.
 //!
 //! * `SIFIS_HOME_PATH` - The path where the device settings are stored
+//! * `MOBILE_API_SCRIPTS_PATH` - The path where command scripts are stored
 //! * `ROCKET_ADDRESS` - Ip address or host to listen on
 //! * `ROCKET_PORT` - Port number to listen on
 //!
@@ -15,9 +16,7 @@
 //! See more Rocket related configuration options from: [rocket#configuration]
 
 use crate::state::DeviceState;
-use mobile_api::configs::DeviceInfo;
-use mobile_api::error::ErrorKind;
-use mobile_api::{device_info_path, sifis_home_path};
+use mobile_api::SifisHome;
 use rocket::fs::{relative, FileServer};
 use rocket::{Build, Rocket};
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
@@ -25,6 +24,7 @@ use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use std::process::ExitCode;
 
+pub mod api_common;
 pub mod api_v1;
 pub mod device_status;
 pub mod state;
@@ -36,39 +36,24 @@ async fn main() -> ExitCode {
     if dotenv::dotenv().is_ok() {
         println!("Loaded environment variables from .env file");
     }
+
+    // Using default SifisHome
+    let sifis_home = SifisHome::new();
     println!(
         "SIFIS-Home path: {}",
-        &sifis_home_path()
+        sifis_home
+            .home_path()
             .to_str()
             .expect("Could not get SIFIS-Home path")
     );
 
-    // Try to load device info and use it to create device state
-    let device_info = match DeviceInfo::load() {
-        Ok(device_info) => device_info,
-        Err(error) => {
-            // Special message for file not found error
-            if let ErrorKind::IoError(io_error) = error.kind() {
-                if io_error.kind() == std::io::ErrorKind::NotFound {
-                    eprintln!(
-                        "Device information file {:?} not found.",
-                        device_info_path()
-                    );
-                    eprintln!("You can use create_device_info application to create it.");
-                    return ExitCode::FAILURE;
-                }
-            };
-
-            // Error message for any other error
-            eprintln!(
-                "Could not load device information file: {:?}",
-                device_info_path()
-            );
-            eprintln!("{}", error);
+    let device_state = match DeviceState::new(sifis_home) {
+        Ok(device_state) => device_state,
+        Err(message) => {
+            eprintln!("{}", message);
             return ExitCode::FAILURE;
         }
     };
-    let device_state = DeviceState::new(device_info);
 
     let launch_result = build_rocket(device_state).launch().await;
 
