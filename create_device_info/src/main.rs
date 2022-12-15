@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     let arguments = Arguments::parse();
 
     // Load .env if available
-    if dotenv::dotenv().is_ok() {
+    if dotenvy::dotenv().is_ok() {
         println!("Loaded environment variables from .env file");
     }
 

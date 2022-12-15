@@ -179,13 +179,12 @@ fn test_authorization_key_in_qrcode() -> Result<(), Box<dyn Error>> {
 
 fn svg_to_dynamic_image(file: &Path) -> Result<DynamicImage, Box<dyn Error>> {
     // Rendering SVG to pixmap
-    let mut svg_options = usvg::Options {
+    let svg_options = usvg::Options {
         resources_dir: Some(PathBuf::from(file.parent().unwrap())),
         ..Default::default()
     };
-    svg_options.fontdb.load_system_fonts();
     let svg_data = fs::read(file).unwrap();
-    let svg_tree = usvg::Tree::from_data(&svg_data, &svg_options.to_ref())?;
+    let svg_tree = usvg::Tree::from_data(&svg_data, &svg_options)?;
     let size = svg_tree.size.width() as u32 * 4;
     let mut pixmap = tiny_skia::Pixmap::new(size, size).unwrap();
     resvg::render(
