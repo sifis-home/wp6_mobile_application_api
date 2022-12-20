@@ -2,14 +2,10 @@
 //!
 //! These endpoints allow Mobile Application to give commands to the Smart Device,
 
-use crate::api_common::{make_json_responses, ErrorResponse, OkErrorBusyResponse, OkResponse};
+use crate::api_common::{ApiKey, ApiKeyError, ErrorResponse, GenericResponse, OkResponse};
 use crate::state::{BusyGuard, DeviceState};
-use rocket::serde::json::Json;
-use rocket::{get, Responder, Shutdown, State};
-use rocket_okapi::gen::OpenApiGenerator;
-use rocket_okapi::okapi::openapi3::Responses;
+use rocket::{get, Shutdown, State};
 use rocket_okapi::openapi;
-use rocket_okapi::response::OpenApiResponderInner;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -26,63 +22,38 @@ use std::process::Command;
 #[openapi(tag = "Commands")]
 #[get("/command/factory_reset?<confirm>")]
 pub async fn factory_reset(
+    key: Result<ApiKey, ApiKeyError>,
     state: &State<DeviceState>,
     confirm: Option<&str>,
-) -> FactoryResetResponse {
-    match confirm {
-        Some("I really want to perform a factory reset") => {
-            match BusyGuard::try_busy(state, "A factory reset is performed.") {
-                Ok(_) => {
-                    if let Err(err) = state.set_config(None) {
-                        return FactoryResetResponse::Error(ErrorResponse::internal_server_error(
-                            err.to_string(),
-                        ));
+) -> GenericResponse {
+    match key {
+        Ok(_) => match confirm {
+            Some("I really want to perform a factory reset") => {
+                match BusyGuard::try_busy(state, "A factory reset is performed.") {
+                    Ok(_) => {
+                        if let Err(err) = state.set_config(None) {
+                            return GenericResponse::Error(ErrorResponse::internal_server_error(
+                                err.to_string(),
+                            ));
+                        }
+                        if let Err(err) = run_script("factory_reset.sh") {
+                            return GenericResponse::Error(ErrorResponse::internal_server_error(
+                                err.to_string(),
+                            ));
+                        }
+                        GenericResponse::Ok(OkResponse::message("Factory reset complete."))
                     }
-                    if let Err(err) = run_script("factory_reset.sh") {
-                        return FactoryResetResponse::Error(ErrorResponse::internal_server_error(
-                            err.to_string(),
-                        ));
-                    }
-                    FactoryResetResponse::Ok(OkResponse::message("Factory reset complete."))
+                    Err(busy) => GenericResponse::Busy(ErrorResponse::service_unavailable(busy)),
                 }
-                Err(busy) => FactoryResetResponse::Busy(ErrorResponse::service_unavailable(busy)),
             }
-        }
-        _ => FactoryResetResponse::BadRequest(ErrorResponse::bad_request(Some(
-            "The required confirm parameter was not correct or set.",
-        ))),
-    }
-}
-
-/// Possible Responses for the Factory Reset Endpoint
-#[derive(Responder)]
-pub enum FactoryResetResponse {
-    /// 200 OK (Factory reset done)
-    #[response(status = 200, content_type = "json")]
-    Ok(Json<OkResponse>),
-
-    /// 400 Bad Request (required confirmation parameters was not given)
-    #[response(status = 400, content_type = "json")]
-    BadRequest(Json<ErrorResponse>),
-
-    /// 500 Internal Server Error (unexpected error)
-    #[response(status = 500, content_type = "json")]
-    Error(Json<ErrorResponse>),
-
-    /// 503 Service Unavailable (server is busy with other task)
-    #[response(status = 503, content_type = "json")]
-    Busy(Json<ErrorResponse>),
-}
-
-impl OpenApiResponderInner for FactoryResetResponse {
-    /// Generating Responses for the Factory Reset Endpoint
-    fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
-        make_json_responses(vec![
-            (200, gen.json_schema::<OkResponse>(), None),
-            (400, gen.json_schema::<ErrorResponse>(), None),
-            (500, gen.json_schema::<ErrorResponse>(), None),
-            (503, gen.json_schema::<ErrorResponse>(), None),
-        ])
+            _ => GenericResponse::BadRequest(ErrorResponse::bad_request(Some(
+                "The required confirm parameter was not correct or set.",
+            ))),
+        },
+        Err(err) => match err {
+            ApiKeyError::InvalidKey(content) => GenericResponse::BadRequest(content),
+            ApiKeyError::WrongKey(content) => GenericResponse::Unauthorized(content),
+        },
     }
 }
 
@@ -91,18 +62,28 @@ impl OpenApiResponderInner for FactoryResetResponse {
 /// Calling this endpoint will initiate a device reboot.
 #[openapi(tag = "Commands")]
 #[get("/command/restart")]
-pub async fn restart(state: &State<DeviceState>, shutdown: Shutdown) -> OkErrorBusyResponse {
-    match BusyGuard::try_busy(state, "The device is restarting.") {
-        Ok(_) => {
-            if let Err(err) = run_script("restart.sh") {
-                return OkErrorBusyResponse::Error(ErrorResponse::internal_server_error(
-                    err.to_string(),
-                ));
+pub async fn restart(
+    key: Result<ApiKey, ApiKeyError>,
+    state: &State<DeviceState>,
+    shutdown: Shutdown,
+) -> GenericResponse {
+    match key {
+        Ok(_) => match BusyGuard::try_busy(state, "The device is restarting.") {
+            Ok(_) => {
+                if let Err(err) = run_script("restart.sh") {
+                    return GenericResponse::Error(ErrorResponse::internal_server_error(
+                        err.to_string(),
+                    ));
+                }
+                shutdown.notify();
+                GenericResponse::Ok(OkResponse::message("System will now restart."))
             }
-            shutdown.notify();
-            OkErrorBusyResponse::Ok(OkResponse::message("System will now restart."))
-        }
-        Err(reason) => OkErrorBusyResponse::Busy(ErrorResponse::service_unavailable(reason)),
+            Err(reason) => GenericResponse::Busy(ErrorResponse::service_unavailable(reason)),
+        },
+        Err(err) => match err {
+            ApiKeyError::InvalidKey(content) => GenericResponse::BadRequest(content),
+            ApiKeyError::WrongKey(content) => GenericResponse::Unauthorized(content),
+        },
     }
 }
 
@@ -111,18 +92,28 @@ pub async fn restart(state: &State<DeviceState>, shutdown: Shutdown) -> OkErrorB
 /// Calling this endpoint will initiate a shutdown of the device.
 #[openapi(tag = "Commands")]
 #[get("/command/shutdown")]
-pub async fn shutdown(state: &State<DeviceState>, shutdown: Shutdown) -> OkErrorBusyResponse {
-    match BusyGuard::try_busy(state, "The device is shutting down.") {
-        Ok(_) => {
-            if let Err(err) = run_script("shutdown.sh") {
-                return OkErrorBusyResponse::Error(ErrorResponse::internal_server_error(
-                    err.to_string(),
-                ));
+pub async fn shutdown(
+    key: Result<ApiKey, ApiKeyError>,
+    state: &State<DeviceState>,
+    shutdown: Shutdown,
+) -> GenericResponse {
+    match key {
+        Ok(_) => match BusyGuard::try_busy(state, "The device is shutting down.") {
+            Ok(_) => {
+                if let Err(err) = run_script("shutdown.sh") {
+                    return GenericResponse::Error(ErrorResponse::internal_server_error(
+                        err.to_string(),
+                    ));
+                }
+                shutdown.notify();
+                GenericResponse::Ok(OkResponse::message("System will now power off."))
             }
-            shutdown.notify();
-            OkErrorBusyResponse::Ok(OkResponse::message("System will now power off."))
-        }
-        Err(reason) => OkErrorBusyResponse::Busy(ErrorResponse::service_unavailable(reason)),
+            Err(reason) => GenericResponse::Busy(ErrorResponse::service_unavailable(reason)),
+        },
+        Err(err) => match err {
+            ApiKeyError::InvalidKey(content) => GenericResponse::BadRequest(content),
+            ApiKeyError::WrongKey(content) => GenericResponse::Unauthorized(content),
+        },
     }
 }
 
@@ -160,7 +151,9 @@ mod tests {
     #[test]
     fn test_factory_reset() {
         std::env::set_var("MOBILE_API_SCRIPTS_PATH", relative!("tests/scripts/"));
+        let uri = "/v1/command/factory_reset";
         let (test_dir, client) = create_test_setup();
+        test_invalid_auth_get(&client, uri);
 
         // Save test config
         let test_config = create_test_config();
@@ -170,29 +163,22 @@ mod tests {
         test_config.save_to(&test_config_file).unwrap();
 
         // Reset needs extra query parameter
-        let response = client.get("/v1/command/factory_reset").dispatch();
+        let response = client.get(uri).header(api_key_header()).dispatch();
         assert_eq!(response.status(), Status::BadRequest);
         let error_response = response.into_json::<ErrorResponse>().unwrap();
         assert_eq!(error_response.error.code, 400);
-        assert!(
-            test_config_file.exists(),
-            "{:?} should still exists",
-            test_config_file
-        );
+        assert!(test_config_file.exists());
 
         // Here we give the required extra parameter
         let (runtime, handle) = make_script_run_checker("FactoryReset", Duration::from_secs(10));
         let response = client
             .get("/v1/command/factory_reset?confirm=I%20really%20want%20to%20perform%20a%20factory%20reset")
+            .header(api_key_header())
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
         let ok_response = response.into_json::<OkResponse>().unwrap();
         assert_eq!(ok_response.code, 200);
-        assert!(
-            !test_config_file.exists(),
-            "{:?} should no longer exists",
-            test_config_file
-        );
+        assert!(!test_config_file.exists());
         let script = runtime.block_on(handle).unwrap().unwrap();
         assert_eq!(script, "factory_reset.sh");
     }
@@ -203,10 +189,12 @@ mod tests {
     #[test]
     fn test_restart() {
         std::env::set_var("MOBILE_API_SCRIPTS_PATH", relative!("tests/scripts/"));
-        let (runtime, handle) = make_script_run_checker("Restart", Duration::from_secs(10));
+        let uri = "/v1/command/restart";
         let (_test_dir, client) = create_test_setup();
+        test_invalid_auth_get(&client, uri);
 
-        let response = client.get("/v1/command/restart").dispatch();
+        let (runtime, handle) = make_script_run_checker("Restart", Duration::from_secs(10));
+        let response = client.get(uri).header(api_key_header()).dispatch();
         assert_eq!(response.status(), Status::Ok);
 
         let ok_response = response.into_json::<OkResponse>().unwrap();
@@ -223,10 +211,12 @@ mod tests {
     #[test]
     fn test_shutdown() {
         std::env::set_var("MOBILE_API_SCRIPTS_PATH", relative!("tests/scripts/"));
-        let (runtime, handle) = make_script_run_checker("Shutdown", Duration::from_secs(10));
+        let uri = "/v1/command/shutdown";
         let (_test_dir, client) = create_test_setup();
+        test_invalid_auth_get(&client, uri);
 
-        let response = client.get("/v1/command/shutdown").dispatch();
+        let (runtime, handle) = make_script_run_checker("Shutdown", Duration::from_secs(10));
+        let response = client.get(uri).header(api_key_header()).dispatch();
         assert_eq!(response.status(), Status::Ok);
 
         let ok_response = response.into_json::<OkResponse>().unwrap();
