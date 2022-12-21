@@ -33,7 +33,7 @@ pub mod state;
 #[rocket::main]
 async fn main() -> ExitCode {
     // Read .env file when available
-    if dotenv::dotenv().is_ok() {
+    if dotenvy::dotenv().is_ok() {
         println!("Loaded environment variables from .env file");
     }
 

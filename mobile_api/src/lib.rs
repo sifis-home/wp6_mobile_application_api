@@ -85,7 +85,7 @@ impl SifisHome {
     /// Load device info from the default location
     ///
     /// This Convenience function tries to load a information file from
-    /// the location returned by the [device_info_path].
+    /// the location returned by the [info_file_path()](SifisHome::info_file_path).
     pub fn load_info(&self) -> Result<DeviceInfo> {
         DeviceInfo::load_from(&self.info_file_path())
     }
@@ -93,7 +93,7 @@ impl SifisHome {
     /// Write device info to the default location.
     ///
     /// This convenience function tries to write information
-    /// to the file path given by the [device_info_path].
+    /// to the file path given by the [info_file_path()](SifisHome::info_file_path).
     pub fn save_info(&self, device_info: &DeviceInfo) -> Result<()> {
         device_info.save_to(&self.info_file_path())
     }
@@ -101,7 +101,7 @@ impl SifisHome {
     /// Load device configuration from default location
     ///
     /// This Convenience function tries to load a configuration file from
-    /// the location returned by the [device_config_path].
+    /// the location returned by the [config_file_path()](SifisHome::config_file_path).
     pub fn load_config(&self) -> Result<DeviceConfig> {
         DeviceConfig::load_from(&self.config_file_path())
     }
@@ -122,7 +122,7 @@ impl SifisHome {
     /// Write config to the default location.
     ///
     /// This convenience function tries to write configuration
-    /// to the file path given by the [device_config_path].
+    /// to the file path given by the [config_file_path()](SifisHome::config_file_path).
     pub fn save_config(&self, config: &DeviceConfig) -> Result<()> {
         config.save_to(&self.config_file_path())
     }

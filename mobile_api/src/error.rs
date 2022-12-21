@@ -20,6 +20,11 @@ impl Error {
         Error(Box::new(kind))
     }
 
+    /// Convenience function for reporting errors with SecurityKey
+    pub(crate) fn security_key_wrong(reason: &'static str) -> Error {
+        Error(Box::new(ErrorKind::SecurityKeyWrong(reason)))
+    }
+
     /// Return the specific type of this error.
     pub fn kind(&self) -> &ErrorKind {
         &self.0
@@ -34,10 +39,11 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self.0 {
+            ErrorKind::Base64DecodeError(ref err) => err.fmt(f),
             ErrorKind::IoError(ref err) => err.fmt(f),
             ErrorKind::NumParseIntError(ref err) => err.fmt(f),
             ErrorKind::RngError(ref err) => err.fmt(f),
-            ErrorKind::SecurityKeyWrongSize => write!(f, "key data length is incorrect"),
+            ErrorKind::SecurityKeyWrong(reason) => reason.fmt(f),
             ErrorKind::SerdeJson(ref err) => err.fmt(f),
             ErrorKind::TimeError(ref err) => err.fmt(f),
         }
@@ -47,18 +53,26 @@ impl fmt::Display for Error {
 /// The specific type of an error
 #[derive(Debug)]
 pub enum ErrorKind {
+    /// Base64 decode error
+    Base64DecodeError(base64::DecodeError),
     /// Standard I/O errors
     IoError(std::io::Error),
     /// Error while parsing integer value from str
     NumParseIntError(std::num::ParseIntError),
     /// Unspecified error from the ring crate
     RngError(ring::error::Unspecified),
-    /// Invalid character count in hex string
-    SecurityKeyWrongSize,
+    /// Error when converting string to SecurityKey
+    SecurityKeyWrong(&'static str),
     /// For JSON serialization errors
     SerdeJson(serde_json::Error),
     /// Error with the time
     TimeError(std::time::SystemTimeError),
+}
+
+impl From<base64::DecodeError> for Error {
+    fn from(err: base64::DecodeError) -> Self {
+        Error::new(ErrorKind::Base64DecodeError(err))
+    }
 }
 
 impl From<std::io::Error> for Error {
@@ -148,12 +162,15 @@ mod tests {
         let key_error = SecurityKey::from_hex("_").err().unwrap();
         let key_error_debug = format!("{:?}", key_error);
         let key_error_display = format!("{}", key_error);
-        assert_eq!(key_error_debug, "Error(SecurityKeyWrongSize)");
+        assert_eq!(
+            key_error_debug,
+            "Error(SecurityKeyWrong(\"key data length is incorrect\"))"
+        );
         assert_eq!(key_error_display, "key data length is incorrect");
-        assert!(matches!(key_error.kind(), ErrorKind::SecurityKeyWrongSize));
+        assert!(matches!(key_error.kind(), ErrorKind::SecurityKeyWrong(_)));
         assert!(matches!(
             key_error.into_kind(),
-            ErrorKind::SecurityKeyWrongSize
+            ErrorKind::SecurityKeyWrong(_)
         ));
     }
 

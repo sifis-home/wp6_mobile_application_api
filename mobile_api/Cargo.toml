@@ -6,6 +6,7 @@ edition = "2021"
 license-file = "../LICENSE"
 
 [dependencies]
+base64 = { version = "0.20.0" }
 ring = { version = "0.16.20" }
 schemars = { version = "0.8.11" }
 serde = { version = "1.0.147", features = ["derive"] }

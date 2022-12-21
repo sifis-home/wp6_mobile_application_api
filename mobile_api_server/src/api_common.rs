@@ -1,15 +1,115 @@
 //! Common implementations for API endpoints
 
+use crate::api_common::ApiKeyError::{InvalidKey, WrongKey};
+use crate::state::DeviceState;
+use mobile_api::security::SecurityKey;
+use rocket::http::Status;
+use rocket::request::{FromRequest, Outcome};
 use rocket::serde::json::Json;
 use rocket::serde::Deserialize;
-use rocket::Responder;
+use rocket::{Request, Responder};
 use rocket_okapi::gen::OpenApiGenerator;
-use rocket_okapi::okapi::openapi3::{MediaType, RefOr, Responses};
+use rocket_okapi::okapi::openapi3::{
+    MediaType, Object, RefOr, Responses, SecurityRequirement, SecurityScheme, SecuritySchemeData,
+};
+use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
 use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::util::{add_media_type, ensure_status_code_exists};
 use schemars::schema::SchemaObject;
 use schemars::JsonSchema;
 use serde::Serialize;
+
+/// ApiKey is the authentication code from Qr Code
+#[derive(Debug)]
+pub struct ApiKey;
+
+/// Possible values returned if ApiKey validation fails
+#[derive(Debug)]
+pub enum ApiKeyError {
+    /// The provided key was in an invalid format or the wrong size
+    InvalidKey(Json<ErrorResponse>),
+
+    /// The provided key was in valid format but was incorrect
+    WrongKey(Json<ErrorResponse>),
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for ApiKey {
+    type Error = ApiKeyError;
+
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        match request.headers().get_one("x-api-key") {
+            // Response for a missing key
+            None => Outcome::Failure((
+                Status::BadRequest,
+                InvalidKey(ErrorResponse::bad_request(Some(
+                    "Missing `x-api-key` header.",
+                ))),
+            )),
+
+            // We have key, checking if it valid and correct
+            Some(given_key_str) => match SecurityKey::from_string(given_key_str) {
+                Ok(key) => {
+                    // Key is valid, but is it correct?
+                    let state = request
+                        .rocket()
+                        .state::<DeviceState>()
+                        .expect("state object should always be available");
+                    if state.device_info().authorization_key() == &key {
+                        // Yes, access should be granted
+                        Outcome::Success(ApiKey)
+                    } else {
+                        // No, access should be denied
+                        Outcome::Failure((
+                            Status::Unauthorized,
+                            WrongKey(ErrorResponse::unauthorized(None)),
+                        ))
+                    }
+                }
+
+                // Key was invalid
+                Err(_) => Outcome::Failure((
+                    Status::BadRequest,
+                    InvalidKey(ErrorResponse::bad_request(Some("Invalid API key"))),
+                )),
+            },
+        }
+    }
+}
+
+impl<'a> OpenApiFromRequest<'a> for ApiKey {
+    fn from_request_input(
+        _gen: &mut OpenApiGenerator,
+        _name: String,
+        _required: bool,
+    ) -> rocket_okapi::Result<RequestHeaderInput> {
+        let security_scheme = SecurityScheme {
+            description: Some(
+                concat!("## Requires an API key to access.\n",
+                "The key is in the Qr code and can be sent as a hex string or base64 format.\n\n",
+                "### Hex string example:\n",
+                "`x-api-key: f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0`\n\n",
+                "### Base64 example:\n",
+                "`x-api-key: 8OHSw7Sllod4aVpLPC0eDw8eLTxLWml4h5altMPS4fA=`\n\n",
+                "**Note:** These are examples and therefore incorrect.\n\n",
+                "---")
+                .to_string(),
+            ),
+            data: SecuritySchemeData::ApiKey {
+                name: "x-api-key".to_string(),
+                location: "header".to_string(),
+            },
+            extensions: Object::default(),
+        };
+        let mut security_req = SecurityRequirement::new();
+        security_req.insert("ApiKeyAuth".to_string(), Vec::new());
+        Ok(RequestHeaderInput::Security(
+            "ApiKeyAuth".to_owned(),
+            security_scheme,
+            security_req,
+        ))
+    }
+}
 
 /// Server error response content
 #[derive(Debug, Deserialize, JsonSchema, Serialize)]
@@ -43,6 +143,22 @@ impl ErrorResponse {
                 reason: "Bad Request".to_string(),
                 description: description
                     .unwrap_or("The request could not be understood by the server due to malformed syntax.")
+                    .to_string(),
+            },
+        })
+    }
+
+    /// Constructing `401 Unauthorized` Response
+    ///
+    /// The `description` option allows custom description,
+    /// but a default description is used by giving a `None` value.
+    pub fn unauthorized(description: Option<&str>) -> Json<ErrorResponse> {
+        Json(ErrorResponse {
+            error: ErrorResponseContent {
+                code: 401,
+                reason: "Unauthorized".to_string(),
+                description: description
+                    .unwrap_or("The request requires user authentication.")
                     .to_string(),
             },
         })
@@ -116,12 +232,20 @@ impl OkResponse {
 
 /// A general set of server responses
 ///
-/// Some endpoints have their collection of server responses, but this set is used in many.
+/// Some endpoints have their collection of server responses, but these are used in many.
 #[derive(Responder)]
-pub enum OkErrorBusyResponse {
+pub enum GenericResponse {
     /// 200 OK
     #[response(status = 200, content_type = "json")]
     Ok(Json<OkResponse>),
+
+    /// 400 Bad Request
+    #[response(status = 400, content_type = "json")]
+    BadRequest(Json<ErrorResponse>),
+
+    /// 401 Unauthorized
+    #[response(status = 401, content_type = "json")]
+    Unauthorized(Json<ErrorResponse>),
 
     /// 500 Internal Server Server
     #[response(status = 500, content_type = "json")]
@@ -132,12 +256,12 @@ pub enum OkErrorBusyResponse {
     Busy(Json<ErrorResponse>),
 }
 
-impl OpenApiResponderInner for OkErrorBusyResponse {
+impl OpenApiResponderInner for GenericResponse {
     fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
         make_json_responses(vec![
             (200, gen.json_schema::<OkResponse>(), None),
             (400, gen.json_schema::<ErrorResponse>(), None),
-            (422, gen.json_schema::<ErrorResponse>(), None),
+            (401, gen.json_schema::<ErrorResponse>(), None),
             (500, gen.json_schema::<ErrorResponse>(), None),
             (503, gen.json_schema::<ErrorResponse>(), None),
         ])
@@ -177,6 +301,7 @@ pub fn make_json_responses(
                 // Default descriptions for known status codes
                 200 => "Ok",
                 400 => "Bad Request",
+                401 => "Unauthorized",
                 404 => "Not Found",
                 422 => "Unprocessable Entity",
                 500 => "Internal Server Error",

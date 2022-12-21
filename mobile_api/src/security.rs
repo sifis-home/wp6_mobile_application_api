@@ -5,7 +5,7 @@
 //!
 //! For the UUIDv7, we need UNIX time in milliseconds, which is done with the get_unix_time_ms.
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::error::{Error, Result};
 use ring::rand::{SecureRandom, SystemRandom};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Metadata, Schema, StringValidation};
@@ -39,6 +39,9 @@ pub type KeyBytes = [u8; 32];
 /// shared key between DHT clients.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct SecurityKey(KeyBytes);
+
+/// Common reason for wrong SecurityKey when parsing from the string
+const WRONG_LENGTH_ERROR: &str = "key data length is incorrect";
 
 impl SecurityKey {
     /// Create new security key
@@ -108,6 +111,14 @@ impl SecurityKey {
         )
     }
 
+    /// Create a key from base64 string
+    pub fn from_base64(string: &str) -> Result<SecurityKey> {
+        match base64::decode(string)?.as_slice().try_into() {
+            Ok(bytes) => Ok(SecurityKey(bytes)),
+            Err(_) => Err(Error::security_key_wrong(WRONG_LENGTH_ERROR)),
+        }
+    }
+
     /// Create a key from the bytes
     pub const fn from_bytes(bytes: KeyBytes) -> SecurityKey {
         SecurityKey(bytes)
@@ -122,7 +133,7 @@ impl SecurityKey {
     /// characters.
     pub fn from_hex(hex: &str) -> Result<SecurityKey> {
         if hex.len() != 64 {
-            return Err(Error::new(ErrorKind::SecurityKeyWrongSize));
+            return Err(Error::security_key_wrong(WRONG_LENGTH_ERROR));
         }
         let mut bytes = [0u8; 32];
         let mut it = bytes.iter_mut();
@@ -130,6 +141,40 @@ impl SecurityKey {
             *it.next().unwrap() = u8::from_str_radix(&hex[i..i + 2], 16)?;
         }
         Ok(SecurityKey::from_bytes(bytes))
+    }
+
+    /// Create a key from string
+    ///
+    /// Given string can be either hex string or base64 encoded.
+    ///
+    ///
+    /// # Example
+    /// ```rust
+    /// use mobile_api::security::SecurityKey;
+    /// let expected_key = SecurityKey::from_bytes([
+    ///     0xf0, 0xe1, 0xd2, 0xc3, 0xb4, 0xa5, 0x96, 0x87, 0x78, 0x69, 0x5a, 0x4b, 0x3c, 0x2d,
+    ///     0x1e, 0x0f, 0x0f, 0x1e, 0x2d, 0x3c, 0x4b, 0x5a, 0x69, 0x78, 0x87, 0x96, 0xa5, 0xb4,
+    ///     0xc3, 0xd2, 0xe1, 0xf0,
+    /// ]);
+    /// let key_from_hex = SecurityKey::from_string(
+    ///     "f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0").unwrap();
+    /// let key_from_base64 = SecurityKey::from_string(
+    ///     "8OHSw7Sllod4aVpLPC0eDw8eLTxLWml4h5altMPS4fA=").unwrap();
+    /// assert_eq!(key_from_hex, expected_key);
+    /// assert_eq!(key_from_base64, expected_key);
+    /// ```
+    pub fn from_string(string: &str) -> Result<SecurityKey> {
+        if string.len() == 64 {
+            if let Ok(key) = SecurityKey::from_hex(string) {
+                return Ok(key);
+            }
+        }
+        if let Ok(key) = SecurityKey::from_base64(string) {
+            return Ok(key);
+        }
+        Err(Error::security_key_wrong(
+            "the key provided was not a suitable hex or base64 string",
+        ))
     }
 
     /// Converting key to hex string
@@ -222,7 +267,7 @@ impl<'de> Deserialize<'de> for SecurityKey {
                         key_bytes[..].copy_from_slice(v);
                         Ok(SecurityKey::from_bytes(key_bytes))
                     } else {
-                        Err(de_error(Error::new(ErrorKind::SecurityKeyWrongSize)))
+                        Err(de_error(Error::security_key_wrong(WRONG_LENGTH_ERROR)))
                     }
                 }
             }
@@ -403,6 +448,10 @@ mod tests {
         0xe1, 0xf0,
     ];
 
+    const TEST_KEY_HEX: &str = "f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+
+    const TEST_KEY_BASE64: &str = "8OHSw7Sllod4aVpLPC0eDw8eLTxLWml4h5altMPS4fA=";
+
     const TEST_KEY: SecurityKey = SecurityKey::from_bytes(TEST_KEY_BYTES);
 
     #[test]
@@ -440,22 +489,10 @@ mod tests {
         let debug = format!("{:?}", TEST_KEY);
         let lower_hex = format!("{:x}", TEST_KEY);
         let upper_hex = format!("{:X}", TEST_KEY);
-        assert_eq!(
-            display,
-            "f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0"
-        );
-        assert_eq!(
-            debug,
-            r#""f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0""#
-        );
-        assert_eq!(
-            lower_hex,
-            "f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0"
-        );
-        assert_eq!(
-            upper_hex,
-            "F0E1D2C3B4A5968778695A4B3C2D1E0F0F1E2D3C4B5A69788796A5B4C3D2E1F0"
-        );
+        assert_eq!(display, TEST_KEY_HEX);
+        assert_eq!(debug, format!("\"{}\"", TEST_KEY_HEX));
+        assert_eq!(lower_hex, TEST_KEY_HEX);
+        assert_eq!(upper_hex, TEST_KEY_HEX.to_uppercase());
     }
 
     #[test]
@@ -471,21 +508,30 @@ mod tests {
         assert!(result.is_err());
 
         // Valid string should give correct key (both lower and upper case hex should be okay)
-        let hex = "f0e1d2c3b4a5968778695a4b3c2d1e0f0F1E2D3C4B5A69788796A5B4C3D2E1F0";
-        let key = SecurityKey::from_hex(hex).unwrap();
+        let key = SecurityKey::from_hex(TEST_KEY_HEX).unwrap();
         assert_eq!(key.as_bytes(), &TEST_KEY_BYTES);
     }
 
     #[test]
+    fn test_security_key_from_string() {
+        // Valid strings
+        let key_from_hex = SecurityKey::from_string(TEST_KEY_HEX).unwrap();
+        let key_from_base64 = SecurityKey::from_string(TEST_KEY_BASE64).unwrap();
+        assert_eq!(TEST_KEY, key_from_hex);
+        assert_eq!(TEST_KEY, key_from_base64);
+
+        // Invalid strings
+        assert!(SecurityKey::from_string(
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        )
+        .is_err(),);
+        assert!(SecurityKey::from_string("8OHSw7Sllod4aVpLPC0eDw==").is_err());
+    }
+
+    #[test]
     fn test_security_key_hex() {
-        assert_eq!(
-            TEST_KEY.hex(false),
-            "f0e1d2c3b4a5968778695a4b3c2d1e0f0f1e2d3c4b5a69788796a5b4c3d2e1f0"
-        );
-        assert_eq!(
-            TEST_KEY.hex(true),
-            "F0E1D2C3B4A5968778695A4B3C2D1E0F0F1E2D3C4B5A69788796A5B4C3D2E1F0"
-        );
+        assert_eq!(TEST_KEY.hex(false), TEST_KEY_HEX);
+        assert_eq!(TEST_KEY.hex(true), TEST_KEY_HEX.to_uppercase());
     }
 
     #[test]

@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     let arguments = Arguments::parse();
 
     // Load .env if available
-    if dotenv::dotenv().is_ok() {
+    if dotenvy::dotenv().is_ok() {
         println!("Loaded environment variables from .env file");
     }
 
@@ -112,7 +112,7 @@ fn main() -> ExitCode {
             }
         };
         let svg = to_svg_string(&qr_code, 4);
-        match fs::write(&svg_file, &svg) {
+        match fs::write(&svg_file, svg) {
             Ok(_) => println!("Qr Code saved as: {:?}", svg_file),
             Err(err) => {
                 eprintln!("Could not save Qr Code: {}", err);

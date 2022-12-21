@@ -7,14 +7,14 @@ license-file = "../LICENSE"
 default-run = "mobile_api_server"
 
 [dependencies]
-dotenv = { version = "0.15.0" }
+dotenvy = { version = "0.15.6" }
 mobile_api = { path = "../mobile_api" }
 rocket = { version = "0.5.0-rc.2", features = ["json", "uuid"] }
 rocket_okapi = { version = "0.8.0-rc.2", features = ["rapidoc", "swagger", "uuid"] }
 schemars = { version = "0.8.11" }
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = { version = "1.0.89" }
-sysinfo = { version = "0.26.7" }
+sysinfo = { version = "0.27.0" }
 
 [dev-dependencies]
 assert_cmd = { version = "2.0.6" }
