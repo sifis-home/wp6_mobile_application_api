@@ -112,7 +112,7 @@ fn main() -> ExitCode {
             }
         };
         let svg = to_svg_string(&qr_code, 4);
-        match fs::write(&svg_file, &svg) {
+        match fs::write(&svg_file, svg) {
             Ok(_) => println!("Qr Code saved as: {:?}", svg_file),
             Err(err) => {
                 eprintln!("Could not save Qr Code: {}", err);

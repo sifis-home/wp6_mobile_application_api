@@ -23,9 +23,13 @@ use serde::Serialize;
 #[derive(Debug)]
 pub struct ApiKey;
 
+/// Possible values returned if ApiKey validation fails
 #[derive(Debug)]
 pub enum ApiKeyError {
+    /// The provided key was in an invalid format or the wrong size
     InvalidKey(Json<ErrorResponse>),
+
+    /// The provided key was in valid format but was incorrect
     WrongKey(Json<ErrorResponse>),
 }
 
