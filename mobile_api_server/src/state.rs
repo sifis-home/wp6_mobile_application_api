@@ -7,7 +7,9 @@ use crate::device_status::{DeviceStatus, DiskStatus, MemStatus};
 use mobile_api::configs::{DeviceConfig, DeviceInfo};
 use mobile_api::SifisHome;
 use std::cmp::Ordering;
+use std::env;
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::{Mutex, RwLock};
 use sysinfo::{CpuExt, CpuRefreshKind, Disk, DiskExt, RefreshKind, System, SystemExt};
 
@@ -205,6 +207,54 @@ impl DeviceState {
     /// Access device info reference
     pub fn device_info(&self) -> &DeviceInfo {
         &self.device_info
+    }
+
+    /// Try to find requested resource path
+    ///
+    /// This function tries to find requested relative path in the following order:
+    ///
+    /// 1. From SIFIS-Home path
+    /// 2. From current dir
+    /// 3. From exe dir
+    /// 4. From CARGO_MANIFEST_DIR
+    ///
+    pub fn resource_path(&self, path: &str) -> Result<PathBuf, std::io::Error> {
+        // Try to find from SIFIS Home path
+        let mut target_path = PathBuf::from(self.sifis_home.home_path());
+        target_path.push(path);
+        if target_path.exists() {
+            return Ok(target_path);
+        }
+
+        // Try to find from current dir
+        if let Ok(mut target_path) = env::current_dir() {
+            target_path.push(path);
+            if target_path.exists() {
+                return Ok(target_path);
+            }
+        }
+
+        // Try to find from current exe dir
+        if let Ok(target_path) = env::current_exe() {
+            if let Some(target_path) = target_path.parent() {
+                let mut target_path = PathBuf::from(target_path);
+                target_path.push(path);
+                if target_path.exists() {
+                    return Ok(target_path);
+                }
+            }
+        }
+
+        // Try to find from CARGO_MANIFEST_DIR
+        if let Ok(target_path) = env::var("CARGO_MANIFEST_DIR") {
+            let mut target_path = PathBuf::from(target_path);
+            target_path.push(path);
+            if target_path.exists() {
+                return Ok(target_path);
+            }
+        }
+
+        Err(std::io::Error::from(std::io::ErrorKind::NotFound))
     }
 }
 

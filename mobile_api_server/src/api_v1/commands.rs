@@ -36,7 +36,7 @@ pub async fn factory_reset(
                                 err.to_string(),
                             ));
                         }
-                        if let Err(err) = run_script("factory_reset.sh") {
+                        if let Err(err) = run_script(state, "factory_reset.sh") {
                             return GenericResponse::Error(ErrorResponse::internal_server_error(
                                 err.to_string(),
                             ));
@@ -70,7 +70,7 @@ pub async fn restart(
     match key {
         Ok(_) => match BusyGuard::try_busy(state, "The device is restarting.") {
             Ok(_) => {
-                if let Err(err) = run_script("restart.sh") {
+                if let Err(err) = run_script(state, "restart.sh") {
                     return GenericResponse::Error(ErrorResponse::internal_server_error(
                         err.to_string(),
                     ));
@@ -100,7 +100,7 @@ pub async fn shutdown(
     match key {
         Ok(_) => match BusyGuard::try_busy(state, "The device is shutting down.") {
             Ok(_) => {
-                if let Err(err) = run_script("shutdown.sh") {
+                if let Err(err) = run_script(state, "shutdown.sh") {
                     return GenericResponse::Error(ErrorResponse::internal_server_error(
                         err.to_string(),
                     ));
@@ -118,10 +118,13 @@ pub async fn shutdown(
 }
 
 /// Run script from the server `scripts` directory
-fn run_script(script_name: &'static str) -> Result<(), Box<dyn std::error::Error>> {
+fn run_script(
+    state: &State<DeviceState>,
+    script_name: &'static str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut script = match std::env::var("MOBILE_API_SCRIPTS_PATH") {
         Ok(path) => PathBuf::from(path),
-        Err(_) => PathBuf::from(rocket::fs::relative!("scripts")),
+        Err(_) => state.resource_path("scripts")?,
     };
     script.push(script_name);
     println!("Running: {:?}", script);
