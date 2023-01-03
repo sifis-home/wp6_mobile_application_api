@@ -112,3 +112,63 @@ A[Boot] -->B{config.json?}
     F -->|Writing config.json| F
     F -->|restart| A
 ```
+
+### SIFIS-Home Targets
+
+The systemd is probably the most common solution for managing services on Linux systems. Below is a simplified graph of default boot targets and services to the multi-user target. The multi-user target has everything running except the graphical user interface and was chosen for the example as SIFIS-Home devices likely do not have displays attached to them.
+
+![Dependencies for default multi-user target boot](images/default-boot.svg "Dependencies for default multi-user target boot")
+
+We can create two new targets for the SIFIS-Home device, the selection of which target is active is based on whether the `config.json` file exists. Now we can set up systemd services to be wanted by one of the targets to decide whether they are run. Services that are only needed for configuration are installed under `sifis-config.target`, and services for the fully configured system are installed under `sifis-home.target`.  The image below shows added targets with their conditions.
+
+![Adding SIFIS-Home Targets](images/sifis-home-boot.svg "Adding SIFIS-Home Targets")
+
+**Note**: Other targets relevant to boot were left out of the picture to clarify SIFIS-Home target additions. All targets and services left out of the picture still exist. We only add two new targets and do not remove anything.
+
+These targets are added to the `/etc/systemd/system` directory.
+
+___
+
+`sifis-config.target` example:
+
+```ini
+# The target for an unconfigured SIFIS-Home system
+
+[Unit]
+Description=SIFIS-Home Configuration Mode
+Wants=network.target
+After=network.target
+ConditionPathExists=!/opt/sifis-home/config.json
+Conflicts=rescue.service rescue.target shutdown.target
+
+[Install]
+WantedBy=multi-user.target
+```
+
+___
+
+`sifis-home.target` example:
+
+```ini
+# The target for a fully configured SIFIS-Home system
+
+[Unit]
+Description=SIFIS-Home System
+Wants=network.target
+After=network.target
+ConditionPathExists=/opt/sifis-home/config.json
+Conflicts=rescue.service rescue.target shutdown.target
+
+[Install]
+WantedBy=multi-user.target
+```
+
+___
+
+We can enable these targets with the following commands:
+
+```bash
+$ sudo systemctl enable sifis-config.target
+$ sudo systemctl enable sifis-home.target
+```
+

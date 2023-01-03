@@ -136,7 +136,7 @@ Create `device.json` with the `create_device_info` on the host system and copy i
 
 The target system should have something like this:
 
-<pre style="line-height:1em;">
+<pre>
 <b>/opt/sifis-home</b>
 ├── device.json
 ├── <b>scripts</b>
@@ -147,6 +147,7 @@ The target system should have something like this:
     ├── favicon.ico
     └── index.html
 </pre>
+
 
 <!-- Links -->
 
