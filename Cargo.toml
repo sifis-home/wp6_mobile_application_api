@@ -1,2 +1,57 @@
-[workspace]
-members = [ "create_device_info", "mobile_api", "mobile_api_server" ]
+[package]
+name = "mobile_api"
+version = "0.1.0"
+authors = ["Ossi Saukko <ossi.saukko@centria.fi>", "Olli Isohanni <olli.isohanni@centria.fi>"]
+edition = "2021"
+description = "SIFIS-Home Smart Device Mobile API"
+readme = "README.md"
+license-file = "LICENSE"
+default-run = "mobile_api_server"
+
+[dependencies]
+base64 = { version = "0.20.0" }
+clap = { features = [ "derive" ], version = "4.0.28" }
+dotenvy = { version = "0.15.6" }
+qrcodegen = { version =  "1.8.0" }
+ring = { version = "0.16.20" }
+rocket = { version = "0.5.0-rc.2", features = ["json", "uuid"] }
+rocket_okapi = { version = "0.8.0-rc.2", features = ["rapidoc", "swagger", "uuid"] }
+schemars = { version = "0.8.11" }
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = { version = "1.0.89" }
+sysinfo = { version = "0.27.0" }
+uuid = { version = "1.2.2", features = [ "serde" ] }
+
+[dev-dependencies]
+assert_cmd = { version = "2.0.6" }
+image = { version = "0.24.5" }
+nix = { version = "0.26.1", features = ["signal"] }
+predicates = { version = "2.1.3" }
+resvg = { version = "0.28.0" }
+rmp-serde = { version = "1.1.1" }
+rqrr = { version = "0.5.2" }
+tempfile = { version = "3.3.0" }
+tokio = { version = "1.22.0", features = ["time", "process"] }
+users = { version = "0.11.0" }
+zbus = { version = "3.6.1", default-features = false, features = ["tokio"] }
+
+# Building Debian Packages
+[package.metadata.deb]
+name = "sifis-home-mobile-api"
+license-file = ["LICENSE", "3"]
+extended-description = """\
+Service for allowing the Mobile Application to configure SIFIS-Home Smart Device. \
+The package also contains a tool for generating a device.json file required for the server to run."""
+depends = ""
+section = "net"
+assets = [
+    ["target/release/mobile_api_server", "usr/bin/", "755"],
+    ["target/release/create_device_info", "usr/bin/", "755"],
+    ["static/favicon.ico", "opt/sifis-home/static/favicon.ico", "644"],
+    ["static/index.html", "opt/sifis-home/static/index.html", "644"],
+    ["scripts/factory_reset.sh", "opt/sifis-home/scripts/factory_reset.sh", "755"],
+    ["scripts/restart.sh", "opt/sifis-home/scripts/restart.sh", "755"],
+    ["scripts/shutdown.sh", "opt/sifis-home/scripts/shutdown.sh", "755"],
+]
+maintainer-scripts = "debian/"
+systemd-units = { enable = false, unit-name = "mobile-api-server" }

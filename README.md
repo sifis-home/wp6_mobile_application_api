@@ -6,13 +6,17 @@ This repository is for a service application that allows the mobile application 
 
 ## Project folders
 
-* `create_device_info` – Tool for creating device.json file for the server and Qr Code for the Mobile application.
+* `debian` – Extra files for the Debian package
 * `docs` – Documentation, instructions, plans
   * [Smart Device Mobile API](docs/Smart%20Device%20Mobile%20API.md) – Plans for Mobile API service and demo setup
-* `mobile_api` – Shared library for Smart Device applications
-* `mobile_api_server` – Smart Device Mobile API server program
-  * `static` – Static files served by the server
-  * `scripts` – Example scripts for each server command
+* `scripts` – Example scripts for each server command
+* `src` – Source files for the Mobile API library
+  * `bin` – Source files for server and device information generator
+
+* `static` – Static files served by the server
+* `tests` – Integration tests
+  * `scripts` – Testing scripts for checking that server runs them
+
 
 ## Building
 
@@ -45,8 +49,6 @@ The API documentation is available from the server by opening the URL http://127
 
 ## Raspberry Pi OS (64-bit)
 
-### Already done
-
 We have already added the following to the `.cargo/config.toml`
 
 ```toml
@@ -55,9 +57,10 @@ We have already added the following to the `.cargo/config.toml`
 # Raspberry Pi 4 64-bit
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-none-linux-gnu-gcc"
+strip = { path = "aarch64-none-linux-gnu-strip" }
 ```
 
-This allows cross-compiling for the 64-bit version of the Raspberry Pi OS. 
+This allows cross-compiling project for the 64-bit version of the Raspberry Pi OS. 
 
 ### Install standard library
 
@@ -86,7 +89,13 @@ For us, the host system was **x86_64 Linux** and target system needed **10.2** v
 
 Download and uncompress the toolchain at the location of your choice.
 
-### Compiling to Raspberry Pi
+### Making package for Raspberry Pi OS
+
+We use *cargo-deb* to create a Debian package for the Raspberry Pi OS. Install it with the following command, or skip it if you have it already.
+
+```bash
+$ cargo install cargo-deb
+```
 
 Give the following commands,  but change the first PATH to match your setup:
 
@@ -94,59 +103,40 @@ Give the following commands,  but change the first PATH to match your setup:
 $ export PATH=$HOME/toolchains/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu/bin:$PATH
 $ export TARGET_CC=aarch64-none-linux-gnu-gcc
 $ export TARGET_AR=aarch64-none-linux-gnu-ar
-$ cargo build --release --target=aarch64-unknown-linux-gnu
+$ cargo deb --target=aarch64-unknown-linux-gnu
 ```
 
 ### Deploying to Raspberry Pi
 
-You can modify the following script to match your system.
+Copy the Mobile API Server Debian package to the device, for example with scp:
 
 ```bash
-#!/bin/bash
+$ scp target/aarch64-unknown-linux-gnu/debian/sifis-home-mobile-api_0.1.0_arm64.deb TARGET_DEVICE_ADDRESS:/home/developer
+```
 
-# Download toolchain from: https://developer.arm.com/downloads/-/gnu-a
-# Change path if necessary
-export PATH=$HOME/toolchain/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu/bin:$PATH
+On the target device run the following command to install the package:
 
-# Using SSH to transfer binary to Pi
-readonly TARGET_HOST=sd-sifis-home
-readonly TARGET_PATH=/home/developer/bin
-readonly TARGET_BINARY=mobile_api_server
+```bash
+$ sudo dpkg -i sifis-home-mobile-api_0.1.0_arm64.deb
+```
 
-# No need to edit these
-readonly TARGET_ARCH=aarch64-unknown-linux-gnu
-export TARGET_CC=aarch64-none-linux-gnu-gcc
-export TARGET_AR=aarch64-none-linux-gnu-ar
+Create required device info with the command:
 
-# Building as release version for Raspberry Pi 4
-cargo build --release --target=${TARGET_ARCH}
+```bash
+$ sudo create_device_info -s /home/developer/qr.svg "My Device Name"
+```
 
-# Copy server binary to Pi
-scp target/${TARGET_ARCH}/release/${TARGET_BINARY} ${TARGET_HOST}:${TARGET_PATH}
+The command above also creates QR code image, which allows the mobile application to scan it for API key needed to use server endpoints.
 
-# Run server on Pi
-ssh -t ${TARGET_HOST} ROCKET_ADDRESS=0.0.0.0 ROCKET_LOG_LEVEL=normal ${TARGET_PATH}/${TARGET_BINARY}
+Finally start and enable the Mobile API Service:
+
+```bash
+$ sudo systemctl start mobile-api-server.service
+$ sudo systemctl enable mobile-api-server.service
 ```
 
 
 
-Please note that the server needs a `device.json` file, `static` folder, and `scripts` folder. The server expects to find these files from `/opt/sifis-home directory`. 
-
-Create `device.json` with the `create_device_info` on the host system and copy it and other files manually to the correct locations.
-
-The target system should have something like this:
-
-<pre>
-<b>/opt/sifis-home</b>
-├── device.json
-├── <b>scripts</b>
-│   ├── factory_reset.sh
-│   ├── restart.sh
-│   └── shutdown.sh
-└── <b>static</b>
-    ├── favicon.ico
-    └── index.html
-</pre>
 
 
 <!-- Links -->
