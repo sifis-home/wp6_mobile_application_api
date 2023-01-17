@@ -47,7 +47,9 @@ The API documentation is available from the server by opening the URL http://127
 
 # Cross Compiling
 
-## Raspberry Pi OS (64-bit)
+For users of Debian-based distributions, an alternative guide after the generic Linux guide.
+
+## Building for Raspberry Pi OS (64-bit) on any Linux
 
 We have already added the following to the `.cargo/config.toml`
 
@@ -106,7 +108,68 @@ $ export TARGET_AR=aarch64-none-linux-gnu-ar
 $ cargo deb --target=aarch64-unknown-linux-gnu
 ```
 
-### Deploying to Raspberry Pi
+See deploying instructions after Debian cross-compiling instructions
+
+
+
+
+----
+
+
+
+## Building for Raspberry Pi OS (64-bit) on Debian-based Distributions
+
+### Install standard library
+
+Assuming you already have a Rust development environment for the host system. Installing a standard library for our target system is easy as
+
+```bash
+$ rustup target add aarch64-unknown-linux-gnu
+```
+
+### Install cross building tools
+
+We can install required tools with the command:
+
+```bash
+$ sudo apt install crossbuild-essential-arm64
+```
+
+We need to modify the `.cargo/config.toml` file to match tool names.  We need to remove `none` from the *linker* and *strip* names.
+
+```toml
+[build]
+
+# Raspberry Pi 4 64-bit
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+strip = { path = "aarch64-linux-gnu-strip" }
+```
+
+### Making package for Raspberry Pi OS
+
+We use *cargo-deb* to create a Debian package for the Raspberry Pi OS. Install it with the following command, or skip it if you have it already.
+
+```bash
+$ cargo install cargo-deb
+```
+
+Give the following commands,  but change the first PATH to match your setup:
+
+```bash
+$ export TARGET_CC=aarch64-linux-gnu-gcc
+$ export TARGET_AR=aarch64-linux-gnu-ar
+$ cargo deb --target=aarch64-unknown-linux-gnu
+```
+
+
+
+
+----
+
+
+
+## Deploying to Raspberry Pi
 
 Copy the Mobile API Server Debian package to the device, for example with scp:
 
@@ -134,8 +197,6 @@ Finally start and enable the Mobile API Service:
 $ sudo systemctl start mobile-api-server.service
 $ sudo systemctl enable mobile-api-server.service
 ```
-
-
 
 
 
