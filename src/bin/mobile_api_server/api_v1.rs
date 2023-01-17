@@ -14,6 +14,7 @@ pub mod tests_common;
 /// implementations.
 pub fn routes() -> Vec<rocket::Route> {
     openapi_get_routes![
+        device::info,
         device::status,
         device::get_config,
         device::set_config,

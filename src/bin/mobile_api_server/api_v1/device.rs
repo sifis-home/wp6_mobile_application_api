@@ -12,6 +12,43 @@ use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::openapi;
 use rocket_okapi::response::OpenApiResponderInner;
+use schemars::JsonSchema;
+use serde::Serialize;
+use uuid::Uuid;
+
+/// Smart Device Information
+///
+/// Contains the product name and unique identifier
+#[derive(Debug, JsonSchema, Serialize)]
+pub struct DeviceInfo<'a> {
+    /// Product name
+    product_name: &'a str,
+    /// 128-bit UUID in standard hex format
+    uuid: &'a Uuid,
+}
+
+impl<'a> From<&'a mobile_api::configs::DeviceInfo> for DeviceInfo<'a> {
+    fn from(value: &'a mobile_api::configs::DeviceInfo) -> DeviceInfo<'a> {
+        Self {
+            product_name: value.product_name(),
+            uuid: value.uuid(),
+        }
+    }
+}
+
+/// # Device info
+///
+/// This endpoint returns device information, which includes
+/// the device's product name and unique identifier.
+///
+/// Unlike other endpoints, this one works without an API key.
+/// Thus, applications using the interface can identify which device
+/// this is and then use the appropriate key for other endpoints.
+#[openapi(tag = "Device")]
+#[get("/device/info")]
+pub async fn info(state: &State<DeviceState>) -> Json<DeviceInfo> {
+    Json(state.device_info().into())
+}
 
 /// # Device status
 ///
@@ -164,9 +201,39 @@ mod tests {
         api_key_header, create_test_config, create_test_setup, test_invalid_auth_get,
     };
     use crate::device_status::DeviceStatus;
+    use crate::state::DeviceState;
     use mobile_api::configs::DeviceConfig;
     use rocket::http::{ContentType, Header, Status};
     use rocket::local::blocking::Client;
+    use serde::Deserialize;
+    use uuid::Uuid;
+
+    #[derive(Deserialize)]
+    pub struct DeviceInfoTest {
+        product_name: String,
+        uuid: Uuid,
+    }
+
+    // Test ignored for Miri because the server has time and io-related
+    // functions that are not available in isolation mode
+    #[cfg_attr(miri, ignore)]
+    #[test]
+    fn test_info() {
+        let uri = "/v1/device/info";
+        let (_test_dir, client) = create_test_setup();
+
+        let response = client.get(uri).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        let device_info_reply = response.into_json::<DeviceInfoTest>().unwrap();
+        let device_info = client
+            .rocket()
+            .state::<DeviceState>()
+            .unwrap()
+            .device_info();
+        assert_eq!(device_info.product_name(), device_info_reply.product_name);
+        assert_eq!(device_info.uuid(), &device_info_reply.uuid);
+    }
 
     // Test ignored for Miri because the server has time and io-related
     // functions that are not available in isolation mode
