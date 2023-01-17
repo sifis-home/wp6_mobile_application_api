@@ -1,0 +1,69 @@
+@startuml
+title Dependencies for default multi-user target boot
+hide empty description
+left to right direction
+
+' Target dependency tree:
+'
+' multi-user.target
+' ├─basic.target
+' │ ├─paths.target
+' │ ├─slices.target
+' │ ├─sockets.target
+' │ ├─sysinit.target
+' │ │ ├─cryptsetup.target
+' │ │ ├─local-fs.target
+' │ │ └─swap.target
+' │ └─timers.target
+' ├─dhcpcd.service
+' │ └─network.target
+' ├─getty.target
+' ├─networking.service
+' │ └─network.target
+' └─remote-fs.target
+
+' State for each target
+state "basic.target"        as basic        : Basic System
+state "cryptsetup.target"   as cryptsetup   : Local Encrypted Volumes
+state "getty.target"        as getty        : Login Prompts
+state "local-fs.target"     as local_fs     : Local File Systems
+state "multi-user.target"   as multi_user   : Multi-User System
+state "network.target"      as network      : Network
+state "paths.target"        as paths        : Paths
+state "remote-fs.target"    as remote_fs    : Remote File Systems
+state "slices.target"       as slices       : Slices
+state "sockets.target"      as sockets      : Sockets
+state "swap.target"         as swap         : Swap
+state "sysinit.target"      as sysinit      : System Initialization
+state "timers.target"       as timers       : Timers
+
+' State for some services that are dependency for essential targets
+state "dhcpcd.service"      as dhcpcd       : DHCP Client Daemon
+state "networking.service"  as networking   : Raise network interfaces
+
+' Multi-User System target dependencies
+basic -[#red,bold]-> multi_user : Requires
+dhcpcd --> multi_user : Wants
+getty --> multi_user : Wants
+networking --> multi_user : Wants
+remote_fs --> multi_user : Wants
+
+' Basic System target dependencies
+paths --> basic : Wants
+slices --> basic : Wants
+sockets --> basic : Wants
+sysinit -[#red,bold]-> basic : Requires
+timers --> basic : Wants
+
+' System Initialization target dependencies
+cryptsetup --> sysinit : Wants
+local_fs --> sysinit : Wants
+swap --> sysinit : Wants
+
+' DHCP Client Daemon service dependencies
+network --> dhcpcd : Wants
+
+' Raise network interfaces service dependencies
+network --> networking : Wants
+
+@enduml

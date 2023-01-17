@@ -6,6 +6,7 @@
 //! For the UUIDv7, we need UNIX time in milliseconds, which is done with the get_unix_time_ms.
 
 use crate::error::{Error, Result};
+use base64::Engine;
 use ring::rand::{SecureRandom, SystemRandom};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Metadata, Schema, StringValidation};
@@ -113,7 +114,11 @@ impl SecurityKey {
 
     /// Create a key from base64 string
     pub fn from_base64(string: &str) -> Result<SecurityKey> {
-        match base64::decode(string)?.as_slice().try_into() {
+        match base64::engine::general_purpose::STANDARD
+            .decode(string)?
+            .as_slice()
+            .try_into()
+        {
             Ok(bytes) => Ok(SecurityKey(bytes)),
             Err(_) => Err(Error::security_key_wrong(WRONG_LENGTH_ERROR)),
         }

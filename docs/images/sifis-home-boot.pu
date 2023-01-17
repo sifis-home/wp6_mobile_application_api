@@ -1,0 +1,69 @@
+@startuml
+title Adding SIFIS-Home Targets
+hide empty description
+left to right direction
+
+' NOTE: Other targets relevant to boot were left out of the picture to
+'       clarify SIFIS-Home target additions. All targets and services
+'       left out of the picture still exist. We only add two new
+'       targets and do not remove anything.
+
+' SIFIS-Home targets
+state "sifis-config.target" as sifis_config #lightblue : SIFIS-Home Configuration Mode
+state "sifis-home.target"   as sifis_home   #lightblue : SIFIS-Home System
+
+' SIFIS-Home target conditions
+note top of sifis_config : <font color=green>ConditionPathExists</font>=<font color=blue>!/opt/sifis-home/config.json</font>
+note bottom of sifis_home : <font color=green>ConditionPathExists=<font color=blue>/opt/sifis-home/config.json</font>
+
+' SIFIS-Home dependencies
+network --> sifis_config : Wants
+network --> sifis_home : Wants
+sifis_config --> multi_user : Wants
+sifis_home --> multi_user : Wants
+
+' State for each target
+'state "basic.target"        as basic        : Basic System
+'state "cryptsetup.target"   as cryptsetup   : Local Encrypted Volumes
+'state "getty.target"        as getty        : Login Prompts
+'state "local-fs.target"     as local_fs     : Local File Systems
+state "multi-user.target"   as multi_user   : Multi-User System
+state "network.target"      as network      : Network
+'state "paths.target"        as paths        : Paths
+'state "remote-fs.target"    as remote_fs    : Remote File Systems
+'state "slices.target"       as slices       : Slices
+'state "sockets.target"      as sockets      : Sockets
+'state "swap.target"         as swap         : Swap
+'state "sysinit.target"      as sysinit      : System Initialization
+'state "timers.target"       as timers       : Timers
+
+' State for some services that are dependency for essential targets
+state "dhcpcd.service"      as dhcpcd       : DHCP Client Daemon
+state "networking.service"  as networking   : Raise network interfaces
+
+' Multi-User System target dependencies
+'basic -[#red,bold]-> multi_user : Requires
+dhcpcd --> multi_user : Wants
+'getty --> multi_user : Wants
+networking --> multi_user : Wants
+'remote_fs --> multi_user : Wants
+
+' Basic System target dependencies
+'paths --> basic : Wants
+'slices --> basic : Wants
+'sockets --> basic : Wants
+'sysinit -[#red,bold]-> basic : Requires
+'timers --> basic : Wants
+
+' System Initialization target dependencies
+'cryptsetup --> sysinit : Wants
+'local_fs --> sysinit : Wants
+'swap --> sysinit : Wants
+
+' DHCP Client Daemon service dependencies
+network --> dhcpcd : Wants
+
+' Raise network interfaces service dependencies
+network --> networking : Wants
+
+@enduml

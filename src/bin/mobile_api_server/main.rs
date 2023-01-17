@@ -17,7 +17,7 @@
 
 use crate::state::DeviceState;
 use mobile_api::SifisHome;
-use rocket::fs::{relative, FileServer};
+use rocket::fs::FileServer;
 use rocket::{Build, Rocket};
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
 use rocket_okapi::settings::UrlObject;
@@ -91,12 +91,17 @@ fn build_rocket(state: DeviceState) -> Rocket<Build> {
         ..Default::default()
     };
 
+    // Get path for static files
+    let static_files = state
+        .resource_path("static")
+        .expect("Could not find static files path");
+
     // Launch server
     rocket::build()
         // Manage state through DeviceState object
         .manage(state)
         // Mount static files to root
-        .mount("/", FileServer::from(relative!("static")))
+        .mount("/", FileServer::from(static_files))
         // Mount APIv1
         .mount("/v1/", api_v1::routes())
         // API documentation from the implementation
