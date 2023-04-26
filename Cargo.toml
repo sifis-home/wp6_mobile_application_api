@@ -9,31 +9,59 @@ license-file = "LICENSE"
 default-run = "mobile_api_server"
 
 [dependencies]
-base64 = { version = "0.21.0" }
-clap = { features = [ "derive" ], version = "4.0.28" }
-dotenvy = { version = "0.15.6" }
-qrcodegen = { version =  "1.8.0" }
-ring = { version = "0.16.20" }
-rocket = { version = "0.5.0-rc.2", features = ["json", "uuid"] }
-rocket_okapi = { version = "0.8.0-rc.2", features = ["rapidoc", "swagger", "uuid"] }
-schemars = { version = "0.8.11", features = ["uuid1"] }
-serde = { version = "1.0.147", features = ["derive"] }
-serde_json = { version = "1.0.89" }
-sysinfo = { version = "0.27.0" }
-uuid = { version = "1.2.2", features = ["serde"] }
+base64 = "0.21"
+dotenvy = "0.15"
+qrcodegen = "1.8"
+ring = "0.16"
+serde_json = "1.0"
+sysinfo = "0.28"
+
+[dependencies.clap]
+features = [ "derive" ]
+version = "4.2"
+
+[dependencies.rocket]
+version = "0.5.0-rc.2"
+features = ["json", "uuid"]
+
+[dependencies.rocket_okapi]
+version = "0.8.0-rc.2"
+features = ["rapidoc", "swagger", "uuid"]
+
+[dependencies.schemars]
+version = "0.8"
+features = ["uuid1"]
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.uuid]
+version = "1.3"
+features = ["serde"]
 
 [dev-dependencies]
-assert_cmd = { version = "2.0.6" }
-image = { version = "0.24.5" }
-nix = { version = "0.26.1", features = ["signal"] }
-predicates = { version = "2.1.3" }
-resvg = { version = "0.28.0" }
-rmp-serde = { version = "1.1.1" }
-rqrr = { version = "0.6.0" }
-tempfile = { version = "3.3.0" }
-tokio = { version = "1.22.0", features = ["time", "process"] }
-users = { version = "0.11.0" }
-zbus = { version = "3.6.1", default-features = false, features = ["tokio"] }
+assert_cmd = "2.0"
+image = "0.24"
+predicates = "3.0"
+resvg = "0.30"
+rmp-serde = "1.1"
+rqrr = "0.6"
+tempfile = "3.5"
+users = "0.11"
+
+[dev-dependencies.nix]
+version = "0.26"
+features = ["signal"]
+
+[dev-dependencies.tokio]
+version = "1.27"
+features = ["time", "process"]
+
+[dev-dependencies.zbus]
+version = "3.11"
+default-features = false
+features = ["tokio"]
 
 # Building Debian Packages
 [package.metadata.deb]

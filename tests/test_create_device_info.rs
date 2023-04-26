@@ -3,7 +3,8 @@ use image::DynamicImage;
 use mobile_api::configs::DeviceInfo;
 use mobile_api::security::SecurityKey;
 use predicates::prelude::*;
-use resvg::{tiny_skia, usvg};
+use resvg::usvg::TreeParsing;
+use resvg::{tiny_skia, usvg, FitTo};
 use std::path::Path;
 use std::{error::Error, fs, os::unix::fs::PermissionsExt, path::PathBuf, process::Command};
 use tempfile::TempDir;
@@ -189,7 +190,7 @@ fn svg_to_dynamic_image(file: &Path) -> Result<DynamicImage, Box<dyn Error>> {
     let mut pixmap = tiny_skia::Pixmap::new(size, size).unwrap();
     resvg::render(
         &svg_tree,
-        usvg::FitTo::Size(size, size),
+        FitTo::Size(size, size),
         tiny_skia::Transform::default(),
         pixmap.as_mut(),
     )
