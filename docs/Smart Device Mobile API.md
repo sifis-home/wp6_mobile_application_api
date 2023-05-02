@@ -121,6 +121,8 @@ The solution does not require a Raspberry Pi 4 computer. However, Raspberry Pi w
 
 Any Linux system should work if the Wi-Fi chip has the required AP operating mode. We can use this document for other Linux setups, but we may need to do slightly different actions.
 
+This section has research information. The actual demo installation guide is in a separate file: [demo-setup/README.md](demo-setup/README.md)
+
 ## SIFIS-Home Targets
 
 The systemd is probably the most common solution for managing services on Linux systems. Below is a simplified graph of default boot targets and services to the multi-user target. The multi-user target has everything running except the graphical user interface and was chosen for the example as SIFIS-Home devices likely do not have displays attached to them.
