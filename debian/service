@@ -1,0 +1,31 @@
+[Unit]
+Description=Mobile API server
+After=network.target
+ConditionPathExists=/opt/sifis-home/device.json
+
+[Service]
+# By default, the server is looking for files from the /opt/sifis-home
+# directory. Uncomment the line below to use a custom path.
+#Environment="SIFIS_HOME_PATH=/my/custom/path"
+
+# The Mobile API server is using Rust Rocket.
+# Below you can set up the listening address and port.
+Environment="ROCKET_ADDRESS=0.0.0.0"
+Environment="ROCKET_PORT=8000"
+
+# Server logging level:
+#
+# critical  Only shows errors and warnings.
+# normal    Shows everything except debug and trace information.
+# debug     Shows everything.
+# off       Shows nothing.
+Environment="ROCKET_LOG_LEVEL=critical"
+
+ExecStart=/usr/bin/mobile_api_server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+

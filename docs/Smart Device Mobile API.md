@@ -113,13 +113,23 @@ A[Boot] -->B{config.json?}
     F -->|restart| A
 ```
 
-### SIFIS-Home Targets
+# Demo Setup on Raspberry Pi 4
+
+This part of the document contains research and instructions on installing the Smart Device Mobile API solution on a Raspberry Pi 4 for demo purposes. 
+
+The solution does not require a Raspberry Pi 4 computer. However, Raspberry Pi was chosen because one was already available, and its Wi-Fi chip was known to support the necessary AP operating mode.
+
+Any Linux system should work if the Wi-Fi chip has the required AP operating mode. We can use this document for other Linux setups, but we may need to do slightly different actions.
+
+This section has research information. The actual demo installation guide is in a separate file: [demo-setup/README.md](demo-setup/README.md)
+
+## SIFIS-Home Targets
 
 The systemd is probably the most common solution for managing services on Linux systems. Below is a simplified graph of default boot targets and services to the multi-user target. The multi-user target has everything running except the graphical user interface and was chosen for the example as SIFIS-Home devices likely do not have displays attached to them.
 
 ![Dependencies for default multi-user target boot](images/default-boot.svg "Dependencies for default multi-user target boot")
 
-We can create two new targets for the SIFIS-Home device, the selection of which target is active is based on whether the `config.json` file exists. Now we can set up systemd services to be wanted by one of the targets to decide whether they are run. Services that are only needed for configuration are installed under `sifis-config.target`, and services for the fully configured system are installed under `sifis-home.target`.  The image below shows added targets with their conditions.
+We can create two new targets for the SIFIS-Home device, the selection of which target is active is based on whether the `config.json` file exists. Now we can set up systemd services to be wanted by one of the targets to decide whether they are run. Services that are only needed for configuration are installed under `sifis-config.target`, and services for the fully configured system are installed under `sifis-home.target`. The image below shows added targets with their conditions.
 
 ![Adding SIFIS-Home Targets](images/sifis-home-boot.svg "Adding SIFIS-Home Targets")
 
@@ -171,4 +181,110 @@ We can enable these targets with the following commands:
 $ sudo systemctl enable sifis-config.target
 $ sudo systemctl enable sifis-home.target
 ```
+
+### Binding Services to Targets
+
+We tried several ways to start the services using our created targets. In the end, using the **`BindsTo=`** and **`After=`** in systemd unit files produced expected results. The Systemd unit file documentation says this about these settings:
+
+> `BindsTo=`
+>
+> Configures requirement dependencies, very similar in style to `Requires=`. However, this dependency type is stronger: in addition to the effect of `Requires=` it declares that if the unit bound to is stopped, this unit will be stopped too. This means a unit bound to another unit that suddenly enters inactive state will be stopped too. Units can suddenly, unexpectedly enter inactive state for different reasons: the main process of a service unit might terminate on its own choice, the backing device of a device unit might be unplugged or the mount point of a mount unit might be unmounted without involvement of the system and service manager.
+>
+> When used in conjunction with `After=` on the same unit the behaviour of `BindsTo=` is even stronger. In this case, the unit bound to strictly has to be in active state for this unit to also be in active state. This not only means a unit bound to another unit that suddenly enters inactive state, but also one that is bound to another unit that gets skipped due to an unmet condition check (such as `ConditionPathExists=`, `ConditionPathIsSymbolicLink=`, … — see below) will be stopped, should it be running. Hence, in many cases it is best to combine `BindsTo=` with `After=`.
+>
+> When `BindsTo=b.service` is used on `a.service`, this dependency will show as `BoundBy=a.service` in property listing of `b.service`. `BoundBy=` dependency cannot be specified directly.
+
+> `Before=`, `After=`
+>
+> These two settings expect a space-separated list of unit names. They may be specified more than once, in which case dependencies for all listed names are created.
+>
+> Those two settings configure ordering dependencies between units. If unit `foo.service` contains the setting `Before=bar.service` and both units are being started, `bar.service`'s start-up is delayed until `foo.service` has finished starting up. `After=` is the inverse of `Before=`, i.e. while `Before=` ensures that the configured unit is started before the listed unit begins starting up, `After=` ensures the opposite, that the listed unit is fully started up before the configured unit is started.
+>
+> When two units with an ordering dependency between them are shut down, the inverse of the start-up order is applied. I.e. if a unit is configured with `After=` on another unit, the former is stopped before the latter if both are shut down. Given two units with any ordering dependency between them, if one unit is shut down and the other is started up, the shutdown is ordered before the start-up. It doesn't matter if the ordering dependency is `After=` or `Before=`, in this case. It also doesn't matter which of the two is shut down, as long as one is shut down and the other is started up; the shutdown is ordered before the start-up in all cases. If two units have no ordering dependencies between them, they are shut down or started up simultaneously, and no ordering takes place. It depends on the unit type when precisely a unit has finished starting up. Most importantly, for service units start-up is considered completed for the purpose of `Before=`/`After=` when all its configured start-up commands have been invoked and they either failed or reported start-up success. Note that this does includes `ExecStartPost=` (or `ExecStopPost=` for the shutdown case).
+>
+> Note that those settings are independent of and orthogonal to the requirement dependencies as configured by `Requires=`, `Wants=`, `Requisite=`, or `BindsTo=`. It is a common pattern to include a unit name in both the `After=` and `Wants=` options, in which case the unit listed will be started before the unit that is configured with these options.
+>
+> Note that `Before=` dependencies on device units have no effect and are not supported. Devices generally become available as a result of an external hotplug event, and systemd creates the corresponding device unit without delay.
+
+
+
+## Software Access Point
+
+Now that we have suitable SIFIS-Home targets, we want to start a Wi-Fi access point with the `sifis-config.target`. First, however, we must ensure that our Wi-Fi device can create an AP before we continue.
+
+### Checking for AP Operating Mode
+
+We need a Wi-Fi device that supports AP operating mode. We can use `iw list` command to check this. The *Supported interface modes* block should include **AP**:
+
+```bash
+$ sudo iw list
+Wiphy phy0
+...
+        Supported interface modes:
+                 * IBSS
+                 * managed
+                 * AP	<- This must be found
+                 * P2P-client
+                 * P2P-GO
+                 * P2P-device
+...
+```
+
+### Hostapd
+
+The hostapd is a user space daemon for access point and authentication servers.
+
+#### Install
+
+```bash
+$ sudo apt install hostapd
+```
+
+#### Configure
+
+##### Start with config target
+
+We need create a override file for the *hostapd* service  to bind it run with the *sifis-config* target. The recommended way is to use *systemctl edit* command for this:
+
+```bash
+$ sudo systemctl edit hostapd.service
+```
+
+```ini
+### Editing /etc/systemd/system/hostapd.service.d/override.conf
+### Anything between here and the comment below will become the new contents of the file
+
+[Unit]
+After=sifis-config.target
+BindsTo=sifis-config.target
+
+### Lines below this comment will be discarded
+
+### /etc/systemd/system/hostapd.service
+# [Unit]
+# Description=Access point and authentication server for Wi-Fi and Ethernet
+# Documentation=man:hostapd(8)
+# After=network.target
+#
+# [Service]
+# Type=forking
+# PIDFile=/run/hostapd.pid
+# Restart=on-failure
+# RestartSec=2
+# Environment=DAEMON_CONF=/etc/hostapd/hostapd.conf
+# EnvironmentFile=-/etc/default/hostapd
+# ExecStart=/usr/sbin/hostapd -B -P /run/hostapd.pid -B $DAEMON_OPTS ${DAEMON_CONF}
+#
+# [Install]
+# WantedBy=multi-user.target
+```
+
+Now we can enable the service, and it should work as expected.
+
+```bash
+$ sudo systemctl daemon-reload
+$ sudo systemctl enable hostapd.service
+```
+
+Try to reboot the device without the `config.json` file, and the service should start, and then reboot with the `config.json` file present, and the service should not start.
 

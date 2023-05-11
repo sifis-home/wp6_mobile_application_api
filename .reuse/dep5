@@ -1,0 +1,7 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: mobile_api
+Source: https://github.com/sifis-home/wp6_mobile_application_api
+
+Files: *
+Copyright: 2022-2023 sifis-home
+License: MIT
