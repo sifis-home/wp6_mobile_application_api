@@ -4,7 +4,7 @@
 
 use crate::api_common::{ApiKey, ApiKeyError, ErrorResponse, GenericResponse, OkResponse};
 use crate::state::{BusyGuard, DeviceState};
-use rocket::{get, Shutdown, State};
+use rocket::{get, State};
 use rocket_okapi::openapi;
 use std::path::PathBuf;
 use std::process::Command;
@@ -65,7 +65,6 @@ pub async fn factory_reset(
 pub async fn restart(
     key: Result<ApiKey, ApiKeyError>,
     state: &State<DeviceState>,
-    shutdown: Shutdown,
 ) -> GenericResponse {
     match key {
         Ok(_) => match BusyGuard::try_busy(state, "The device is restarting.") {
@@ -75,7 +74,6 @@ pub async fn restart(
                         err.to_string(),
                     ));
                 }
-                shutdown.notify();
                 GenericResponse::Ok(OkResponse::message("System will now restart."))
             }
             Err(reason) => GenericResponse::Busy(ErrorResponse::service_unavailable(reason)),
@@ -95,7 +93,6 @@ pub async fn restart(
 pub async fn shutdown(
     key: Result<ApiKey, ApiKeyError>,
     state: &State<DeviceState>,
-    shutdown: Shutdown,
 ) -> GenericResponse {
     match key {
         Ok(_) => match BusyGuard::try_busy(state, "The device is shutting down.") {
@@ -105,7 +102,6 @@ pub async fn shutdown(
                         err.to_string(),
                     ));
                 }
-                shutdown.notify();
                 GenericResponse::Ok(OkResponse::message("System will now power off."))
             }
             Err(reason) => GenericResponse::Busy(ErrorResponse::service_unavailable(reason)),
