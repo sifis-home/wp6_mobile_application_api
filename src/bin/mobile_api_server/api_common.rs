@@ -292,7 +292,7 @@ pub fn make_json_responses(
 ) -> rocket_okapi::Result<Responses> {
     let mut responses = Responses::default();
     for (status, schema, description) in status_schema_description {
-        let mut response = match ensure_status_code_exists(&mut responses, status) {
+        let response = match ensure_status_code_exists(&mut responses, status) {
             RefOr::Ref(_) => continue, // Skipping references
             RefOr::Object(object) => object,
         };

@@ -181,3 +181,44 @@ pub fn test_invalid_auth_get(client: &Client, uri: &str) {
         "The request requires user authentication."
     );
 }
+
+pub fn test_invalid_auth_post(client: &Client, uri: &str) {
+    // Testing request without api key
+    let response = client.post(uri).dispatch();
+    assert_eq!(response.status(), Status::BadRequest);
+    let error_response = response.into_json::<ErrorResponse>().unwrap();
+    assert_eq!(error_response.error.code, 400);
+    assert_eq!(error_response.error.reason, "Bad Request");
+    assert_eq!(
+        error_response.error.description,
+        "Missing `x-api-key` header."
+    );
+
+    // Testing request with invalid api key
+    let response = client
+        .post(uri)
+        .header(Header::new("x-api-key", "invalid key"))
+        .dispatch();
+    assert_eq!(response.status(), Status::BadRequest);
+    let error_response = response.into_json::<ErrorResponse>().unwrap();
+    assert_eq!(error_response.error.code, 400);
+    assert_eq!(error_response.error.reason, "Bad Request");
+    assert_eq!(error_response.error.description, "Invalid API key");
+
+    // Testing with wrong api key
+    let response = client
+        .post(uri)
+        .header(Header::new(
+            "x-api-key",
+            "8OHSw7Sllod4aVpLPC0eDw8eLTxLWml4h5altMPS4fA=",
+        ))
+        .dispatch();
+    assert_eq!(response.status(), Status::Unauthorized);
+    let error_response = response.into_json::<ErrorResponse>().unwrap();
+    assert_eq!(error_response.error.code, 401);
+    assert_eq!(error_response.error.reason, "Unauthorized");
+    assert_eq!(
+        error_response.error.description,
+        "The request requires user authentication."
+    );
+}

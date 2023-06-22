@@ -4,7 +4,7 @@
 
 use crate::api_common::{ApiKey, ApiKeyError, ErrorResponse, GenericResponse, OkResponse};
 use crate::state::{BusyGuard, DeviceState};
-use rocket::{get, State};
+use rocket::{post, State};
 use rocket_okapi::openapi;
 use std::path::PathBuf;
 use std::process::Command;
@@ -20,7 +20,7 @@ use std::process::Command;
 /// To perform a factory reset, the `confirm` parameter must be set to the message
 /// `I really want to perform a factory reset`.
 #[openapi(tag = "Commands")]
-#[get("/command/factory_reset?<confirm>")]
+#[post("/command/factory_reset?<confirm>")]
 pub async fn factory_reset(
     key: Result<ApiKey, ApiKeyError>,
     state: &State<DeviceState>,
@@ -61,7 +61,7 @@ pub async fn factory_reset(
 ///
 /// Calling this endpoint will initiate a device reboot.
 #[openapi(tag = "Commands")]
-#[get("/command/restart")]
+#[post("/command/restart")]
 pub async fn restart(
     key: Result<ApiKey, ApiKeyError>,
     state: &State<DeviceState>,
@@ -89,7 +89,7 @@ pub async fn restart(
 ///
 /// Calling this endpoint will initiate a shutdown of the device.
 #[openapi(tag = "Commands")]
-#[get("/command/shutdown")]
+#[post("/command/shutdown")]
 pub async fn shutdown(
     key: Result<ApiKey, ApiKeyError>,
     state: &State<DeviceState>,
@@ -152,7 +152,7 @@ mod tests {
         std::env::set_var("MOBILE_API_SCRIPTS_PATH", relative!("tests/scripts/"));
         let uri = "/v1/command/factory_reset";
         let (test_dir, client) = create_test_setup();
-        test_invalid_auth_get(&client, uri);
+        test_invalid_auth_post(&client, uri);
 
         // Save test config
         let test_config = create_test_config();
@@ -162,7 +162,7 @@ mod tests {
         test_config.save_to(&test_config_file).unwrap();
 
         // Reset needs extra query parameter
-        let response = client.get(uri).header(api_key_header()).dispatch();
+        let response = client.post(uri).header(api_key_header()).dispatch();
         assert_eq!(response.status(), Status::BadRequest);
         let error_response = response.into_json::<ErrorResponse>().unwrap();
         assert_eq!(error_response.error.code, 400);
@@ -171,7 +171,7 @@ mod tests {
         // Here we give the required extra parameter
         let (runtime, handle) = make_script_run_checker("FactoryReset", Duration::from_secs(10));
         let response = client
-            .get("/v1/command/factory_reset?confirm=I%20really%20want%20to%20perform%20a%20factory%20reset")
+            .post("/v1/command/factory_reset?confirm=I%20really%20want%20to%20perform%20a%20factory%20reset")
             .header(api_key_header())
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
@@ -190,10 +190,10 @@ mod tests {
         std::env::set_var("MOBILE_API_SCRIPTS_PATH", relative!("tests/scripts/"));
         let uri = "/v1/command/restart";
         let (_test_dir, client) = create_test_setup();
-        test_invalid_auth_get(&client, uri);
+        test_invalid_auth_post(&client, uri);
 
         let (runtime, handle) = make_script_run_checker("Restart", Duration::from_secs(10));
-        let response = client.get(uri).header(api_key_header()).dispatch();
+        let response = client.post(uri).header(api_key_header()).dispatch();
         assert_eq!(response.status(), Status::Ok);
 
         let ok_response = response.into_json::<OkResponse>().unwrap();
@@ -212,10 +212,10 @@ mod tests {
         std::env::set_var("MOBILE_API_SCRIPTS_PATH", relative!("tests/scripts/"));
         let uri = "/v1/command/shutdown";
         let (_test_dir, client) = create_test_setup();
-        test_invalid_auth_get(&client, uri);
+        test_invalid_auth_post(&client, uri);
 
         let (runtime, handle) = make_script_run_checker("Shutdown", Duration::from_secs(10));
-        let response = client.get(uri).header(api_key_header()).dispatch();
+        let response = client.post(uri).header(api_key_header()).dispatch();
         assert_eq!(response.status(), Status::Ok);
 
         let ok_response = response.into_json::<OkResponse>().unwrap();
